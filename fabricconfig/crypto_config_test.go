@@ -8,7 +8,7 @@ import (
 )
 
 func TestUnmarshalCryptoConfig(t *testing.T) {
-	data, err := ioutil.ReadFile("/home/ubuntu/codework/golang/fabric-distributed-tool/sampleconfig/v1.4/crypto-config.yaml")
+	data, err := ioutil.ReadFile("../sampleconfig/v1.4/crypto-config.yaml")
 	require.NoError(t, err)
 	cc := CryptoConfig{}
 	err = yaml.Unmarshal(data, &cc)
@@ -32,5 +32,10 @@ func TestMarshalCryptoConfig(t *testing.T) {
 	data, err := yaml.Marshal(cryptoConfig)
 	require.NoError(t, err)
 	err = ioutil.WriteFile("test.yaml", data, 0755)
+	require.NoError(t, err)
+}
+
+func TestGenerateLocallyTestNetwork(t *testing.T) {
+	err := GenerateLocallyTestNetwork("./")
 	require.NoError(t, err)
 }
