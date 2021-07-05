@@ -1,0 +1,36 @@
+package fabricconfig
+
+import (
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
+	"testing"
+)
+
+func TestUnmarshalCryptoConfig(t *testing.T) {
+	data, err := ioutil.ReadFile("/home/ubuntu/codework/golang/fabric-distributed-tool/sampleconfig/v1.4/crypto-config.yaml")
+	require.NoError(t, err)
+	cc := CryptoConfig{}
+	err = yaml.Unmarshal(data, &cc)
+	require.NoError(t, err)
+	t.Log(cc)
+}
+
+func TestMarshalCryptoConfig(t *testing.T) {
+	c := cryptoPeerConfig{
+		Name:          "aa",
+		Domain:        "example.com",
+		EnableNodeOUs: true,
+		Specs:         []cryptoSpec{{Hostname: "aa.example.com"}, {Hostname: "bb"}},
+		Users:         cryptoUsers{Count: 1},
+	}
+	var cpc []cryptoPeerConfig
+	cpc = append(cpc, c)
+	cryptoConfig := CryptoConfig{
+		PeerOrgs: cpc,
+	}
+	data, err := yaml.Marshal(cryptoConfig)
+	require.NoError(t, err)
+	err = ioutil.WriteFile("test.yaml", data, 0755)
+	require.NoError(t, err)
+}
