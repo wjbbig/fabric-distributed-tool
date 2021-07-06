@@ -1,5 +1,13 @@
 package fabricconfig
 
+import (
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
+	"path/filepath"
+)
+
+const defaultConfigtxFileName = "configtx.yaml"
+
 type Configtx struct {
 	Profiles map[string]ConfigtxProfile `yaml:"Profiles,omitempty"`
 }
@@ -152,7 +160,7 @@ func GenerateLocallyTestNetworkConfigtx(filePath string) error {
 	twoOrgsOrdererGenesis := ConfigtxProfile{
 		Orderer: ConfigtxOrderer{
 			OrdererType:  "solo",
-			Addresses:    []string{"orderer.example.com"},
+			Addresses:    []string{"orderer.example.com:7050"},
 			BatchTimeout: "2s",
 			BatchSize: ConfigtxBatchSize{
 				MaxMessageCount:   10,
@@ -220,7 +228,6 @@ func GenerateLocallyTestNetworkConfigtx(filePath string) error {
 				"V1_1":   false,
 			},
 		},
-		Application: ConfigtxApplication{},
 		Capabilities: map[string]bool{
 			"V1_4_3": true,
 			"V1_3":   false,
@@ -247,5 +254,57 @@ func GenerateLocallyTestNetworkConfigtx(filePath string) error {
 	configtx.Profiles = make(map[string]ConfigtxProfile)
 	configtx.Profiles["TwoOrgsOrdererGenesis"] = twoOrgsOrdererGenesis
 
-	return nil
+	// 生成channel文件相关配置
+	twoOrgsChannel := ConfigtxProfile{
+		Consortium: "SampleConsortium",
+		Application: ConfigtxApplication{
+			Organizations: []ConfigtxOrganization{org1, org2},
+			Policies: map[string]ConfigtxPolicy{
+				"Readers": {
+					Type: "ImplicitMeta",
+					Rule: `"ANY Readers"`,
+				},
+				"Writers": {
+					Type: "ImplicitMeta",
+					Rule: `"ANY Writers"`,
+				},
+				"Admins": {
+					Type: "ImplicitMeta",
+					Rule: `"MAJORITY Admins"`,
+				},
+			},
+			Capabilities: map[string]bool{
+				"V1_4_2": true,
+				"V1_3":   false,
+				"V1_2":   false,
+				"V1_1":   false,
+			},
+		},
+		Capabilities: map[string]bool{
+			"V1_4_3": true,
+			"V1_3":   false,
+			"V1_1":   false,
+		},
+		Policies: map[string]ConfigtxPolicy{
+			"Readers": {
+				Type: "ImplicitMeta",
+				Rule: `"ANY Readers"`,
+			},
+			"Writers": {
+				Type: "ImplicitMeta",
+				Rule: `"ANY Writers"`,
+			},
+			"Admins": {
+				Type: "ImplicitMeta",
+				Rule: `"MAJORITY Admins"`,
+			},
+		},
+	}
+	configtx.Profiles["TwoOrgsChannel"] = twoOrgsChannel
+	path := filepath.Join(filePath, defaultConfigtxFileName)
+	data, err := yaml.Marshal(configtx)
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(path, data, 0755)
 }
