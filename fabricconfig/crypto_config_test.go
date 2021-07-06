@@ -4,6 +4,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
+	"strings"
 	"testing"
 )
 
@@ -37,5 +38,25 @@ func TestMarshalCryptoConfig(t *testing.T) {
 
 func TestGenerateLocallyTestNetwork(t *testing.T) {
 	err := GenerateLocallyTestNetwork("./")
+	require.NoError(t, err)
+}
+
+func TestSplitPeerOrOrdererUrl(t *testing.T) {
+	urls := []string{"peer0.org1", "aa.org2.example.com"}
+
+	for _, url := range urls {
+		firstDotIndex := strings.Index(url, ".")
+		peerName := url[:firstDotIndex]
+
+		args := strings.Split(url, ".")
+		orgName := args[1]
+		domain := url[firstDotIndex+1:]
+
+		t.Logf("peerName=%s, orgName=%s, domain=%s\n", peerName, orgName, domain)
+	}
+}
+
+func TestGenerateCryptoConfigFile(t *testing.T) {
+	err := GenerateCryptoConfigFile("./", []string{"ab.testorg", "cd.testorg1", "ef.testorg1"}, []string{"orderer1.ordererOrg", "orderer2.ordererOrg"})
 	require.NoError(t, err)
 }

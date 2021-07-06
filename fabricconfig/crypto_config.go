@@ -2,12 +2,16 @@ package fabricconfig
 
 import (
 	"github.com/pkg/errors"
+	log "github.com/wjbbig/fabric-distributed-tool/logger"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"path/filepath"
+	"strings"
 )
 
 const defaultCryptoConfigFileName = "crypto-config.yaml"
+
+var logger = log.NewLogger(log.Info)
 
 type CryptoConfig struct {
 	OrdererOrgs []cryptoOrdererConfig `yaml:"OrdererOrgs,omitempty"`
@@ -46,13 +50,79 @@ type cryptoUsers struct {
 }
 
 // GenerateCryptoConfigFile 根据传入的信息生成crypto-config.yaml文件
-func GenerateCryptoConfigFile(filePath string) error {
-	//path := filepath.Join(filePath, defaultCryptoConfigFileName)
-	return nil
+func GenerateCryptoConfigFile(filePath string, peers, orderers []string) error {
+	logger.Info("begin to generate crypto-config.yaml")
+	path := filepath.Join(filePath, defaultCryptoConfigFileName)
+	var cryptoConfig CryptoConfig
+	var ordererConfigs []cryptoOrdererConfig
+	var peerConfigs []cryptoPeerConfig
+
+	ordererMap := make(map[string]cryptoOrdererConfig)
+	for _, ordererUrl := range orderers {
+		ordererName, ordererOrg, ordererDomain := splitNameOrgDomain(ordererUrl)
+		oc, ok := ordererMap[ordererDomain]
+		if !ok {
+			ordererMap[ordererDomain] = cryptoOrdererConfig{
+				Name:          ordererOrg,
+				Domain:        ordererDomain,
+				EnableNodeOUs: true,
+				Specs:         []cryptoSpec{{Hostname: ordererName}},
+			}
+		} else {
+			oc.Specs = append(oc.Specs, cryptoSpec{Hostname: ordererName})
+			ordererMap[ordererDomain] = oc
+		}
+
+	}
+	for _, config := range ordererMap {
+		ordererConfigs = append(ordererConfigs, config)
+	}
+	peerMap := make(map[string]cryptoPeerConfig)
+	for _, peerUrl := range peers {
+		peerName, peerOrg, peerDomain := splitNameOrgDomain(peerUrl)
+		pc, ok := peerMap[peerDomain]
+		if !ok {
+			peerMap[peerDomain] = cryptoPeerConfig{
+				Name:          peerOrg,
+				Domain:        peerDomain,
+				EnableNodeOUs: true,
+				Specs:         []cryptoSpec{{Hostname: peerName}},
+				Users:         cryptoUsers{Count: 1},
+			}
+		} else {
+			pc.Specs = append(pc.Specs, cryptoSpec{Hostname: peerName})
+			peerMap[peerDomain] = pc
+		}
+	}
+	for _, config := range peerMap {
+		peerConfigs = append(peerConfigs, config)
+	}
+
+	cryptoConfig.PeerOrgs = peerConfigs
+	cryptoConfig.OrdererOrgs = ordererConfigs
+	data, err := yaml.Marshal(cryptoConfig)
+	if err != nil {
+		return err
+	}
+	defer logger.Debugf("finish generating crypto-config.yaml, the content: \n%s", string(data))
+	return ioutil.WriteFile(path, data, 0755)
 }
 
-// GenerateLocallyTestNetwork 生成一个本地测试网络的crypto-config.yaml文件
-func GenerateLocallyTestNetwork(filePath string) error {
+// SplitNameOrgDomain 将url拆分成节点名称,组织名称和域名
+// 默认以'.'为分割符,分割后第1个元素是节点名称,第二个是组织名,
+// 第二个到之后所有的内容组为域名
+func splitNameOrgDomain(url string) (string, string, string) {
+	firstDotIndex := strings.Index(url, ".")
+	name := url[:firstDotIndex]
+
+	args := strings.Split(url, ".")
+	orgName := args[1]
+	domain := url[firstDotIndex+1:]
+	return name, orgName, domain
+}
+
+// GenerateLocallyTestNetworkCryptoConfig 生成一个本地测试网络的crypto-config.yaml文件
+func GenerateLocallyTestNetworkCryptoConfig(filePath string) error {
 	var cryptoConfig CryptoConfig
 	var ordererConfigs []cryptoOrdererConfig
 	var peerConfigs []cryptoPeerConfig
