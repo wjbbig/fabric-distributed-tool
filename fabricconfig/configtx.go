@@ -12,6 +12,7 @@ import (
 )
 
 const defaultConfigtxFileName = "configtx.yaml"
+const defaultConsortiumName = "fabricConsortiums"
 
 type Configtx struct {
 	Profiles map[string]ConfigtxProfile `yaml:"Profiles,omitempty"`
@@ -87,14 +88,14 @@ type ConfigtxApplication struct {
 	Capabilities  map[string]bool           `yaml:"Capabilities,omitempty"`
 }
 
-func GenerateConfigtxFile(filePath string, orderers, peers []string) error {
+func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers []string) error {
 	var configtx Configtx
 	var consenters []ConfigtxConsenter
 	var ordererOrganizations []ConfigtxOrganization
 	ordererOrgsPath := filepath.Join(filePath, "crypto-config", "ordererOrganizations")
 	for _, orderer := range orderers {
 		ordererArgs := strings.Split(orderer, ":")
-		ordererName, ordererOrgName, ordererDomain := splitNameOrgDomain(ordererArgs[0])
+		_, ordererOrgName, ordererDomain := splitNameOrgDomain(ordererArgs[0])
 		serverCertPath := filepath.Join(ordererOrgsPath, ordererDomain, "orderers", ordererArgs[0], "tls/server.crt")
 		port, err := strconv.Atoi(ordererArgs[1])
 		if err != nil {
@@ -130,7 +131,115 @@ func GenerateConfigtxFile(filePath string, orderers, peers []string) error {
 		ordererOrganizations = append(ordererOrganizations, ordererOrganization)
 	}
 
-	return nil
+	orderer := ConfigtxOrderer{
+		OrdererType:  ordererType,
+		Addresses:    orderers,
+		BatchTimeout: "2s",
+		BatchSize: ConfigtxBatchSize{
+			MaxMessageCount:   10,
+			AbsoluteMaxBytes:  "99 MB",
+			PreferredMaxBytes: "512 KB",
+		},
+		EtcdRaft:      ConfigtxEtcdRaft{Consenters: consenters},
+		Organizations: ordererOrganizations,
+		Policies: map[string]ConfigtxPolicy{
+			fconfigtx.ReadersPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "ANY Readers",
+			},
+			fconfigtx.WritersPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "ANY Writers",
+			},
+			fconfigtx.AdminsPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "ANY Admins",
+			},
+			fconfigtx.BlockValidationPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "ANY Writers",
+			},
+		},
+		Capabilities: map[string]bool{
+			"V1_4_2": true,
+		},
+	}
+
+	var peerOrganizations []ConfigtxOrganization
+	//peerOrgsPath := filepath.Join(filePath, "crypto-config", "peerOrganizations")
+	//for _, peer := range peers {
+	//
+	//}
+
+	_ = ConfigtxApplication{
+		Organizations: peerOrganizations,
+		Policies: map[string]ConfigtxPolicy{
+			fconfigtx.ReadersPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "ANY Readers",
+			},
+			fconfigtx.WritersPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "ANY Writers",
+			},
+			fconfigtx.AdminsPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "ANY Admins",
+			},
+			// TODO 2.0
+		},
+		Capabilities: map[string]bool{
+			"V1_4_2": true,
+			"V1_3":   false,
+			"V1_2":   false,
+			"V1_1":   false,
+		},
+	}
+	configtx = Configtx{map[string]ConfigtxProfile{
+		"fabricGenesis": {
+			Orderer: orderer,
+			Capabilities: map[string]bool{
+				"V1_4_3": true,
+				"V1_3":   false,
+				"V1_1":   false,
+			},
+			Consortiums: map[string]ConfigtxConsortium{
+				defaultConsortiumName: {
+					Organizations: peerOrganizations,
+				},
+			},
+			Policies: map[string]ConfigtxPolicy{
+				fconfigtx.ReadersPolicyKey: {
+					Type: fconfigtx.ImplicitMetaPolicyType,
+					Rule: "ANY Readers",
+				},
+				fconfigtx.WritersPolicyKey: {
+					Type: fconfigtx.ImplicitMetaPolicyType,
+					Rule: "ANY Writers",
+				},
+				fconfigtx.AdminsPolicyKey: {
+					Type: fconfigtx.ImplicitMetaPolicyType,
+					Rule: "ANY Admins",
+				},
+			},
+		},
+	}}
+
+	// todo 完成channel相关的profile
+	switch ordererType {
+	case "etcdraft":
+		fmt.Println("raft")
+	default:
+		fmt.Println("solo")
+	}
+
+	data, err := yaml.Marshal(configtx)
+	if err != nil {
+		return err
+	}
+
+	path := filepath.Join(filePath, defaultConfigtxFileName)
+	return ioutil.WriteFile(path, data, 0755)
 }
 
 // GenerateLocallyTestNetworkConfigtx 生成一个用于本地测试使用的configtx.yaml文件
