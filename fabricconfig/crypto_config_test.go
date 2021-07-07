@@ -37,7 +37,7 @@ func TestMarshalCryptoConfig(t *testing.T) {
 }
 
 func TestGenerateLocallyTestNetwork(t *testing.T) {
-	err := GenerateLocallyTestNetwork("./")
+	err := GenerateLocallyTestNetworkCryptoConfig("./")
 	require.NoError(t, err)
 }
 
