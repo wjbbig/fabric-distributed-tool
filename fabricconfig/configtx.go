@@ -6,13 +6,21 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
+	"math/rand"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
-const defaultConfigtxFileName = "configtx.yaml"
-const defaultConsortiumName = "fabricConsortiums"
+const (
+	defaultConfigtxFileName   = "configtx.yaml"
+	defaultConsortiumName     = "FabricConsortiums"
+	defaultGenesisName        = "FabricGenesis"
+	ordererType_SOLO          = "solo"
+	ordererType_ETCDRAFT      = "etcdraft"
+	defaultChannelProfileName = "FabricChannel"
+)
 
 type Configtx struct {
 	Profiles map[string]ConfigtxProfile `yaml:"Profiles,omitempty"`
@@ -88,31 +96,48 @@ type ConfigtxApplication struct {
 	Capabilities  map[string]bool           `yaml:"Capabilities,omitempty"`
 }
 
+// orderPeerOrdererByOrg 将相同组织的节点整理在一起
+func orderPeerOrdererByOrg(urls []string) map[string][]string {
+	orderedUrl := make(map[string][]string)
+	for _, url := range urls {
+		_, org, _ := splitNameOrgDomain(url)
+		orderedUrl[org] = append(orderedUrl[org], url)
+	}
+	return orderedUrl
+}
+
 func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers []string) error {
+	logger.Infof("begin to generate config.tx, orderer type=%s", ordererType)
 	var configtx Configtx
 	var consenters []ConfigtxConsenter
 	var ordererOrganizations []ConfigtxOrganization
 	ordererOrgsPath := filepath.Join(filePath, "crypto-config", "ordererOrganizations")
-	for _, orderer := range orderers {
-		ordererArgs := strings.Split(orderer, ":")
+	ordererMap := orderPeerOrdererByOrg(orderers)
+	for _, ordererUrls := range ordererMap {
+		for _, url := range ordererUrls {
+			ordererArgs := strings.Split(url, ":")
+			_, _, ordererDomain := splitNameOrgDomain(ordererArgs[0])
+			serverCertPath := filepath.Join(ordererOrgsPath, ordererDomain, "orderers", ordererArgs[0], "tls/server.crt")
+			port, err := strconv.Atoi(ordererArgs[1])
+			if err != nil {
+				return errors.Wrap(err, "get orderer port failed")
+			}
+			consenter := ConfigtxConsenter{
+				Host:          ordererArgs[0],
+				Port:          uint32(port),
+				ClientTLSCert: serverCertPath,
+				ServerTLSCert: serverCertPath,
+			}
+			consenters = append(consenters, consenter)
+		}
+		ordererArgs := strings.Split(ordererUrls[0], ":")
 		_, ordererOrgName, ordererDomain := splitNameOrgDomain(ordererArgs[0])
-		serverCertPath := filepath.Join(ordererOrgsPath, ordererDomain, "orderers", ordererArgs[0], "tls/server.crt")
-		port, err := strconv.Atoi(ordererArgs[1])
-		if err != nil {
-			return errors.Wrap(err, "get orderer port failed")
-		}
-		consenter := ConfigtxConsenter{
-			Host:          ordererArgs[0],
-			Port:          uint32(port),
-			ClientTLSCert: serverCertPath,
-			ServerTLSCert: serverCertPath,
-		}
-		consenters = append(consenters, consenter)
+
 		mspId := fmt.Sprintf("%sMSP", ordererOrgName)
 		ordererOrganization := ConfigtxOrganization{
 			Name:   ordererOrgName,
 			ID:     mspId,
-			MSPDir: filepath.Join(ordererOrgsPath, ordererDomain, "orderers", ordererArgs[0], "msp/"),
+			MSPDir: filepath.Join(ordererOrgsPath, ordererDomain, "msp"),
 			Policies: map[string]ConfigtxPolicy{
 				fconfigtx.ReadersPolicyKey: {
 					Type: fconfigtx.SignaturePolicyType,
@@ -166,12 +191,49 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 	}
 
 	var peerOrganizations []ConfigtxOrganization
-	//peerOrgsPath := filepath.Join(filePath, "crypto-config", "peerOrganizations")
-	//for _, peer := range peers {
-	//
-	//}
+	peerOrgsPath := filepath.Join(filePath, "crypto-config", "peerOrganizations")
+	peerMap := orderPeerOrdererByOrg(peers)
+	for _, peerUrls := range peerMap {
+		rand.Seed(time.Now().UnixNano())
+		peerIndex := rand.Intn(len(peerUrls))
+		peerArgs := strings.Split(peerUrls[peerIndex], ":")
+		port, err := strconv.Atoi(peerArgs[1])
+		if err != nil {
+			return err
+		}
+		var anchorPeers []ConfigtxAnchorPeer
+		anchorPeer := ConfigtxAnchorPeer{
+			Host: peerUrls[peerIndex],
+			Port: uint32(port),
+		}
+		anchorPeers = append(anchorPeers, anchorPeer)
+		_, org, domain := splitNameOrgDomain(peerArgs[0])
+		mspId := fmt.Sprintf("%sMSP", org)
+		peerOrganization := ConfigtxOrganization{
+			Name:   org,
+			ID:     mspId,
+			MSPDir: filepath.Join(peerOrgsPath, domain, "msp"),
+			Policies: map[string]ConfigtxPolicy{
+				fconfigtx.ReadersPolicyKey: {
+					Type: fconfigtx.SignaturePolicyType,
+					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.peer', '%[1]s.client')", mspId),
+				},
+				fconfigtx.WritersPolicyKey: {
+					Type: fconfigtx.SignaturePolicyType,
+					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.client')", mspId),
+				},
+				fconfigtx.AdminsPolicyKey: {
+					Type: fconfigtx.SignaturePolicyType,
+					Rule: fmt.Sprintf("OR('%s.admin')", mspId),
+				},
+			},
+			AnchorPeers: anchorPeers,
+		}
+		// TODO 2.0
+		peerOrganizations = append(peerOrganizations, peerOrganization)
+	}
 
-	_ = ConfigtxApplication{
+	application := ConfigtxApplication{
 		Organizations: peerOrganizations,
 		Policies: map[string]ConfigtxPolicy{
 			fconfigtx.ReadersPolicyKey: {
@@ -195,44 +257,95 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 			"V1_1":   false,
 		},
 	}
-	configtx = Configtx{map[string]ConfigtxProfile{
-		"fabricGenesis": {
-			Orderer: orderer,
-			Capabilities: map[string]bool{
-				"V1_4_3": true,
-				"V1_3":   false,
-				"V1_1":   false,
-			},
-			Consortiums: map[string]ConfigtxConsortium{
-				defaultConsortiumName: {
-					Organizations: peerOrganizations,
-				},
-			},
-			Policies: map[string]ConfigtxPolicy{
-				fconfigtx.ReadersPolicyKey: {
-					Type: fconfigtx.ImplicitMetaPolicyType,
-					Rule: "ANY Readers",
-				},
-				fconfigtx.WritersPolicyKey: {
-					Type: fconfigtx.ImplicitMetaPolicyType,
-					Rule: "ANY Writers",
-				},
-				fconfigtx.AdminsPolicyKey: {
-					Type: fconfigtx.ImplicitMetaPolicyType,
-					Rule: "ANY Admins",
-				},
-			},
-		},
-	}}
 
-	// todo 完成channel相关的profile
 	switch ordererType {
-	case "etcdraft":
-		fmt.Println("raft")
+	case ordererType_ETCDRAFT:
+		application.Organizations = ordererOrganizations
+		configtx.Profiles = map[string]ConfigtxProfile{
+			defaultGenesisName: {
+				Orderer:     orderer,
+				Application: application,
+				Capabilities: map[string]bool{
+					"V1_4_3": true,
+					"V1_3":   false,
+					"V1_1":   false,
+				},
+				Consortiums: map[string]ConfigtxConsortium{
+					defaultConsortiumName: {
+						Organizations: peerOrganizations,
+					},
+				},
+				Policies: map[string]ConfigtxPolicy{
+					fconfigtx.ReadersPolicyKey: {
+						Type: fconfigtx.ImplicitMetaPolicyType,
+						Rule: "ANY Readers",
+					},
+					fconfigtx.WritersPolicyKey: {
+						Type: fconfigtx.ImplicitMetaPolicyType,
+						Rule: "ANY Writers",
+					},
+					fconfigtx.AdminsPolicyKey: {
+						Type: fconfigtx.ImplicitMetaPolicyType,
+						Rule: "ANY Admins",
+					},
+				},
+			},
+		}
 	default:
-		fmt.Println("solo")
+		configtx.Profiles = map[string]ConfigtxProfile{
+			defaultGenesisName: {
+				Orderer: orderer,
+				Capabilities: map[string]bool{
+					"V1_4_3": true,
+					"V1_3":   false,
+					"V1_1":   false,
+				},
+				Consortiums: map[string]ConfigtxConsortium{
+					defaultConsortiumName: {
+						Organizations: peerOrganizations,
+					},
+				},
+				Policies: map[string]ConfigtxPolicy{
+					fconfigtx.ReadersPolicyKey: {
+						Type: fconfigtx.ImplicitMetaPolicyType,
+						Rule: "ANY Readers",
+					},
+					fconfigtx.WritersPolicyKey: {
+						Type: fconfigtx.ImplicitMetaPolicyType,
+						Rule: "ANY Writers",
+					},
+					fconfigtx.AdminsPolicyKey: {
+						Type: fconfigtx.ImplicitMetaPolicyType,
+						Rule: "ANY Admins",
+					},
+				},
+			},
+		}
 	}
 
+	configtx.Profiles[defaultChannelProfileName] = ConfigtxProfile{
+		Consortium:  defaultConsortiumName,
+		Application: application,
+		Capabilities: map[string]bool{
+			"V1_4_3": true,
+			"V1_3":   false,
+			"V1_1":   false,
+		},
+		Policies: map[string]ConfigtxPolicy{
+			fconfigtx.ReadersPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "ANY Readers",
+			},
+			fconfigtx.WritersPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "ANY Writers",
+			},
+			fconfigtx.AdminsPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "ANY Admins",
+			},
+		},
+	}
 	data, err := yaml.Marshal(configtx)
 	if err != nil {
 		return err
