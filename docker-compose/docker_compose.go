@@ -70,13 +70,49 @@ func detectImageNameAndTag(keyword string) (string, error) {
 }
 
 func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherUrls []string) error {
+	var dockerCompose DockerCompose
+	imageName, err := detectImageNameAndTag("fabric-orderer")
+	if err != nil {
+		return err
+	}
+
+	ordererURLArgs := strings.Split(ordererUrl, ":")
+	_, orgName, domain := util.SplitNameOrgDomain(ordererURLArgs[0])
+	ordererService := Service{
+		ContainerName: ordererURLArgs[0],
+		Image:         imageName,
+		Environment: []string{
+			"FABRIC_LOGGING_SPEC=INFO",
+			"ORDERER_GENERAL_LISTENADDRESS=0.0.0.0",
+			"ORDERER_GENERAL_GENESISMETHOD=file",
+			"ORDERER_GENERAL_GENESISFILE=/var/hyperledger/orderer/orderer.genesis.block",
+			fmt.Sprintf("ORDERER_GENERAL_LOCALMSPID=%s", orgName),
+			"ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp",
+			"ORDERER_GENERAL_TLS_ENABLED=true",
+			"ORDERER_GENERAL_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key",
+			"ORDERER_GENERAL_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt",
+			"ORDERER_GENERAL_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]",
+			"ORDERER_KAFKA_TOPIC_REPLICATIONFACTOR=1",
+			"ORDERER_KAFKA_VERBOSE=true",
+			"ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE=/var/hyperledger/orderer/tls/server.crt",
+			"ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY=/var/hyperledger/orderer/tls/server.key",
+			"ORDERER_GENERAL_CLUSTER_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]",
+		},
+		WorkingDir: "/opt/gopath/src/github.com/hyperledger/fabric",
+		Command:    "orderer",
+		Volumes:    nil,
+		Ports:      []string{fmt.Sprintf("%[1]s:%[1]s", ordererURLArgs[1])},
+		dependsOn:  nil,
+		Networks:   nil,
+		ExtraHosts: nil,
+	}
 	return nil
 }
 
 // GeneratePeerDockerComposeFile 生产peer的docker-compose启动文件
 func GeneratePeerDockerComposeFile(filePath string, peerUrl string, anchorPeerUrl string, otherUrls []string) error {
 	var dockerCompose DockerCompose
-	imageName, err := detectImageNameAndTag("peer")
+	imageName, err := detectImageNameAndTag("fabric-peer")
 	if err != nil {
 		return err
 	}
@@ -113,7 +149,7 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, anchorPeerUr
 			fmt.Sprintf("%s/crypto-config/peerOrganizations/%s/peers/%s/tls:/etc/hyperledger/fabric/tls", filePath, domain, peerUrlArgs[0]),
 			fmt.Sprintf("%s:/var/hyperledger/production", peerUrlArgs[0]),
 		},
-		Ports:      []string{fmt.Sprintf("%s:%s", peerUrlArgs[1], peerUrlArgs[1])},
+		Ports:      []string{fmt.Sprintf("%[1]s:%[1]s", peerUrlArgs[1])},
 		Networks:   []string{defaultNetworkName},
 		ExtraHosts: nil,
 	}
