@@ -8,3 +8,4 @@ out
 gen
 .vscode
 fabricconfig/*.yaml
+docker-compose/*.yaml
