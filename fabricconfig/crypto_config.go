@@ -3,10 +3,10 @@ package fabricconfig
 import (
 	"github.com/pkg/errors"
 	log "github.com/wjbbig/fabric-distributed-tool/logger"
+	"github.com/wjbbig/fabric-distributed-tool/util"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"path/filepath"
-	"strings"
 )
 
 const defaultCryptoConfigFileName = "crypto-config.yaml"
@@ -59,7 +59,7 @@ func GenerateCryptoConfigFile(filePath string, peers, orderers []string) error {
 
 	ordererMap := make(map[string]cryptoOrdererConfig)
 	for _, ordererUrl := range orderers {
-		ordererName, ordererOrg, ordererDomain := splitNameOrgDomain(ordererUrl)
+		ordererName, ordererOrg, ordererDomain := util.SplitNameOrgDomain(ordererUrl)
 		oc, ok := ordererMap[ordererDomain]
 		if !ok {
 			ordererMap[ordererDomain] = cryptoOrdererConfig{
@@ -79,7 +79,7 @@ func GenerateCryptoConfigFile(filePath string, peers, orderers []string) error {
 	}
 	peerMap := make(map[string]cryptoPeerConfig)
 	for _, peerUrl := range peers {
-		peerName, peerOrg, peerDomain := splitNameOrgDomain(peerUrl)
+		peerName, peerOrg, peerDomain := util.SplitNameOrgDomain(peerUrl)
 		pc, ok := peerMap[peerDomain]
 		if !ok {
 			peerMap[peerDomain] = cryptoPeerConfig{
@@ -106,19 +106,6 @@ func GenerateCryptoConfigFile(filePath string, peers, orderers []string) error {
 	}
 	defer logger.Debugf("finish generating crypto-config.yaml, the content: \n%s", string(data))
 	return ioutil.WriteFile(path, data, 0755)
-}
-
-// SplitNameOrgDomain 将url拆分成节点名称,组织名称和域名
-// 默认以'.'为分割符,分割后第1个元素是节点名称,第二个是组织名,
-// 第二个到之后所有的内容组为域名
-func splitNameOrgDomain(url string) (string, string, string) {
-	firstDotIndex := strings.Index(url, ".")
-	name := url[:firstDotIndex]
-
-	args := strings.Split(url, ".")
-	orgName := args[1]
-	domain := url[firstDotIndex+1:]
-	return name, orgName, domain
 }
 
 // GenerateLocallyTestNetworkCryptoConfig 生成一个本地测试网络的crypto-config.yaml文件

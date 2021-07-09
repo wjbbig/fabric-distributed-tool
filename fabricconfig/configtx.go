@@ -4,6 +4,7 @@ import (
 	"fmt"
 	fconfigtx "github.com/hyperledger/fabric-config/configtx"
 	"github.com/pkg/errors"
+	"github.com/wjbbig/fabric-distributed-tool/util"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"math/rand"
@@ -100,7 +101,7 @@ type ConfigtxApplication struct {
 func orderPeerOrdererByOrg(urls []string) map[string][]string {
 	orderedUrl := make(map[string][]string)
 	for _, url := range urls {
-		_, org, _ := splitNameOrgDomain(url)
+		_, org, _ := util.SplitNameOrgDomain(url)
 		orderedUrl[org] = append(orderedUrl[org], url)
 	}
 	return orderedUrl
@@ -116,7 +117,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 	for _, ordererUrls := range ordererMap {
 		for _, url := range ordererUrls {
 			ordererArgs := strings.Split(url, ":")
-			_, _, ordererDomain := splitNameOrgDomain(ordererArgs[0])
+			_, _, ordererDomain := util.SplitNameOrgDomain(ordererArgs[0])
 			serverCertPath := filepath.Join(ordererOrgsPath, ordererDomain, "orderers", ordererArgs[0], "tls/server.crt")
 			port, err := strconv.Atoi(ordererArgs[1])
 			if err != nil {
@@ -131,25 +132,24 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 			consenters = append(consenters, consenter)
 		}
 		ordererArgs := strings.Split(ordererUrls[0], ":")
-		_, ordererOrgName, ordererDomain := splitNameOrgDomain(ordererArgs[0])
+		_, ordererOrgName, ordererDomain := util.SplitNameOrgDomain(ordererArgs[0])
 
-		mspId := fmt.Sprintf("%sMSP", ordererOrgName)
 		ordererOrganization := ConfigtxOrganization{
 			Name:   ordererOrgName,
-			ID:     mspId,
+			ID:     ordererOrgName,
 			MSPDir: filepath.Join(ordererOrgsPath, ordererDomain, "msp"),
 			Policies: map[string]ConfigtxPolicy{
 				fconfigtx.ReadersPolicyKey: {
 					Type: fconfigtx.SignaturePolicyType,
-					Rule: fmt.Sprintf("OR('%[1]s.admin','%[1]s.orderer','%[1]s.client')", mspId),
+					Rule: fmt.Sprintf("OR('%[1]s.admin','%[1]s.orderer','%[1]s.client')", ordererOrgName),
 				},
 				fconfigtx.WritersPolicyKey: {
 					Type: fconfigtx.SignaturePolicyType,
-					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.orderer', '%[1]s.client')", mspId),
+					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.orderer', '%[1]s.client')", ordererOrgName),
 				},
 				fconfigtx.AdminsPolicyKey: {
 					Type: fconfigtx.SignaturePolicyType,
-					Rule: fmt.Sprintf("OR('%s.admin')", mspId),
+					Rule: fmt.Sprintf("OR('%s.admin')", ordererOrgName),
 				},
 			},
 		}
@@ -203,28 +203,27 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 		}
 		var anchorPeers []ConfigtxAnchorPeer
 		anchorPeer := ConfigtxAnchorPeer{
-			Host: peerUrls[peerIndex],
+			Host: peerArgs[0],
 			Port: uint32(port),
 		}
 		anchorPeers = append(anchorPeers, anchorPeer)
-		_, org, domain := splitNameOrgDomain(peerArgs[0])
-		mspId := fmt.Sprintf("%sMSP", org)
+		_, org, domain := util.SplitNameOrgDomain(peerArgs[0])
 		peerOrganization := ConfigtxOrganization{
 			Name:   org,
-			ID:     mspId,
+			ID:     org,
 			MSPDir: filepath.Join(peerOrgsPath, domain, "msp"),
 			Policies: map[string]ConfigtxPolicy{
 				fconfigtx.ReadersPolicyKey: {
 					Type: fconfigtx.SignaturePolicyType,
-					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.peer', '%[1]s.client')", mspId),
+					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.peer', '%[1]s.client')", org),
 				},
 				fconfigtx.WritersPolicyKey: {
 					Type: fconfigtx.SignaturePolicyType,
-					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.client')", mspId),
+					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.client')", org),
 				},
 				fconfigtx.AdminsPolicyKey: {
 					Type: fconfigtx.SignaturePolicyType,
-					Rule: fmt.Sprintf("OR('%s.admin')", mspId),
+					Rule: fmt.Sprintf("OR('%s.admin')", org),
 				},
 			},
 			AnchorPeers: anchorPeers,
