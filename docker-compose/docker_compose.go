@@ -66,9 +66,10 @@ func detectImageNameAndTag(keyword string) (string, error) {
 		}
 	}
 
-	return "", nil
+	return "", errors.Errorf("there is no docker image containing keyword %s", keyword)
 }
 
+// GenerateOrdererDockerComposeFile 生成启动orderer的docker-compose文件
 func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherUrls []string) error {
 	var dockerCompose DockerCompose
 	imageName, err := detectImageNameAndTag("fabric-orderer")
@@ -100,13 +101,37 @@ func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherU
 		},
 		WorkingDir: "/opt/gopath/src/github.com/hyperledger/fabric",
 		Command:    "orderer",
-		Volumes:    nil,
-		Ports:      []string{fmt.Sprintf("%[1]s:%[1]s", ordererURLArgs[1])},
-		dependsOn:  nil,
-		Networks:   nil,
-		ExtraHosts: nil,
+		Volumes: []string{
+			fmt.Sprintf("%s/channel-artifacts/genesis.block:/var/hyperledger/orderer/orderer.genesis.block", filePath),
+			fmt.Sprintf("%s/crypto-config/ordererOrganizations/%s/orderers/%s/msp:/var/hyperledger/orderer/msp",
+				filePath, domain, ordererURLArgs[0]),
+			fmt.Sprintf("%s/crypto-config/ordererOrganizations/%s/orderers/%s/tls/:/var/hyperledger/orderer/tls",
+				filePath, domain, ordererURLArgs[0]),
+			fmt.Sprintf("%s:/var/hyperledger/production/orderer", ordererURLArgs[0]),
+		},
+		Ports:    []string{fmt.Sprintf("%[1]s:%[1]s", ordererURLArgs[1])},
+		Networks: []string{defaultNetworkName},
 	}
-	return nil
+	dockerCompose.Services = map[string]Service{
+		ordererURLArgs[0]: ordererService,
+	}
+	dockerCompose.Version = `2`
+	dockerCompose.Networks = map[string]ExternalNetwork{
+		defaultNetworkName: {},
+	}
+	_, err = os.Stat(filePath)
+	if err != err {
+		if err = os.MkdirAll(filePath, 0755); err != nil {
+			return err
+		}
+	}
+	filePath = filepath.Join(filePath, fmt.Sprintf("%s%s.yaml", defaultDockerComposeFile,
+		strings.ReplaceAll(ordererURLArgs[0], ".", "-")))
+	data, err := yaml.Marshal(dockerCompose)
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(filePath, data, 0755)
 }
 
 // GeneratePeerDockerComposeFile 生产peer的docker-compose启动文件
