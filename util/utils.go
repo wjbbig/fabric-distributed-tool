@@ -14,3 +14,19 @@ func SplitNameOrgDomain(url string) (string, string, string) {
 	domain := url[firstDotIndex+1:]
 	return name, orgName, domain
 }
+
+// Indexes 拓展了strings.Index方法，返回子字符串的全部位置
+func Indexes(str string, subStr string) []int {
+	var indexes []int
+	var lastIndex int
+	for {
+		if index := strings.Index(str, subStr); index != -1 {
+			indexes = append(indexes, index+lastIndex)
+			lastIndex += index + 1
+			str = str[index+1:]
+		} else {
+			break
+		}
+	}
+	return indexes
+}
