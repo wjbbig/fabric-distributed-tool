@@ -1,6 +1,6 @@
 package sshutil
 
 type SSHUtil struct {
-	url    string
-	client string
+	url           string
+	remoteClients map[string]string
 }

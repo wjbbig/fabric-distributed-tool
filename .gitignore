@@ -9,4 +9,5 @@ gen
 .vscode
 fabricconfig/*.yaml
 docker-compose/*.yaml
+sshutil/*.yaml
 fdt

@@ -8,6 +8,7 @@ require (
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/hyperledger/fabric-config v0.1.0
 	github.com/hyperledger/fabric-protos-go v0.0.0-20210528200356-82833ecdac31 // indirect
+	github.com/hyperledger/fabric-sdk-go v1.0.0
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.8.1 // indirect
