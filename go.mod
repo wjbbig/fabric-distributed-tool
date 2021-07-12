@@ -14,6 +14,7 @@ require (
 	github.com/pkg/sftp v1.10.1
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/spf13/cobra v1.2.1
+	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/crypto v0.0.0-20210616213533-5ff15b29337e
 	gopkg.in/yaml.v2 v2.4.0
