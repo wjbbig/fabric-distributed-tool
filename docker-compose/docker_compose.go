@@ -200,3 +200,8 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, anchorPeerUr
 	}
 	return ioutil.WriteFile(filePath, data, 0755)
 }
+
+// generateCLI 生成cli容器的docker-compose.yaml文件,2.x版本默认不再提供cli容器
+func generateCLI(filePath string) error {
+	return nil
+}
