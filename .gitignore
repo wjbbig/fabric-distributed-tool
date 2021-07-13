@@ -11,4 +11,5 @@ fabricconfig/*.yaml
 docker-compose/*.yaml
 sshutil/*.yaml
 sshutil/ssh_test.go
+connectionprofile/*.yaml
 fdt
