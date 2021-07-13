@@ -127,3 +127,9 @@ func TestGenerateTestNetworkConnProfile(t *testing.T) {
 	err = ioutil.WriteFile("./connection-config.yaml", data, 0755)
 	require.NoError(t, err)
 }
+
+func TestGenerateNetworkConnProfile(t *testing.T) {
+	GenerateNetworkConnProfile(".", "mychannel",
+		[]string{"peer0.org1.example.com:7051:192.111.43.11", "peer0.org2.example.com:8051:127.0.0.1"},
+		[]string{"orderer.example.com:7050:127.0.0.1"})
+}

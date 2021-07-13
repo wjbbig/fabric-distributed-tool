@@ -2,7 +2,10 @@ package connectionprofile
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"github.com/wjbbig/fabric-distributed-tool/util"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
 	"path/filepath"
 	"strings"
 )
@@ -190,7 +193,7 @@ type EntityMatcher struct {
 	MappedHost                          string `yaml:"mappedHost,omitempty"`
 }
 
-// GenerateNetworkConnProfile 生成连接文件,peer和orderer的格式必须是url:port
+// GenerateNetworkConnProfile 生成连接文件,peer和orderer的格式必须是url:port:ip
 func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ordererUrls []string) error {
 	var connProfile ConnProfile
 	connProfile.Version = "1.0.0"
@@ -214,12 +217,19 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 	}
 	connProfile.Client = client
 
+	channel := Channel{Peers: map[string]ChannelPeer{}}
 	peers := make(map[string]Peer)
+	organizations := make(map[string]Organization)
+	entityMatchers := make(map[string][]EntityMatcher)
 	for _, url := range peerUrls {
 		args := strings.Split(url, ":")
-		_, _, domain := util.SplitNameOrgDomain(args[0])
+		if len(args) != 3 {
+			return errors.Errorf("the peer url should be url:port:ip, but got %s", url)
+		}
+		_, orgName, domain := util.SplitNameOrgDomain(args[0])
+		// peer
 		peers[args[0]] = Peer{
-			URL: url,
+			URL: fmt.Sprintf("%s:%s", args[0], args[1]),
 			GRPCOptions: GRPCOptions{
 				SSLTargetNameOverride: args[0],
 				KeepAliveTime:         "0s",
@@ -231,15 +241,52 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 			TLSCACerts: TLSCACert{Path: filepath.Join(filePath, defaultCryptoConfigDirName, "peerOrganizations", domain,
 				"tlsca", fmt.Sprintf("tlsca.%s-cert.pem", domain))},
 		}
+		// channel
+		channel.Peers[args[0]] = ChannelPeer{
+			EndorsingPeer:  true,
+			ChaincodeQuery: true,
+			LedgerQuery:    true,
+			EventSource:    true,
+		}
+
+		// organization
+		org, exist := organizations[orgName]
+		if exist {
+			org.Peers = append(org.Peers, args[0])
+		} else {
+			organizations[orgName] = Organization{
+				MSPId:      orgName,
+				CryptoPath: fmt.Sprintf("peerOrganizations/%[1]s/users/{username}@%[1]s/msp", domain),
+				Peers:      []string{args[0]},
+			}
+		}
+
+		// entity matcher
+		em := EntityMatcher{
+			Pattern:                             args[0],
+			UrlSubstitutionExp:                  fmt.Sprintf("%s:%s", args[2], args[1]),
+			SSLTargetOverrideUrlSubstitutionExp: args[0],
+			MappedHost:                          args[0],
+		}
+		if args[2] == "localhost" || args[2] == "127.0.0.1" {
+			em.UrlSubstitutionExp = fmt.Sprintf("%s:%s", args[0], args[1])
+		}
+		entityMatchers["peer"] = append(entityMatchers["peer"], em)
 	}
 	connProfile.Peers = peers
+	connProfile.Channels = map[string]Channel{
+		channelId: channel,
+	}
 
 	orderers := make(map[string]Orderer)
 	for _, url := range ordererUrls {
 		args := strings.Split(url, ":")
-		_, _, domain := util.SplitNameOrgDomain(args[0])
+		if len(args) != 3 {
+			return errors.Errorf("the orderer url should be url:port:ip, but got %s", url)
+		}
+		_, orgName, domain := util.SplitNameOrgDomain(args[0])
 		orderers[args[0]] = Orderer{
-			URL: url,
+			URL: fmt.Sprintf("%s:%s", args[0], args[1]),
 			GRPCOptions: GRPCOptions{
 				SSLTargetNameOverride: args[0],
 				KeepAliveTime:         "0s",
@@ -251,8 +298,34 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 			TLSCACerts: TLSCACert{Path: filepath.Join(filePath, defaultCryptoConfigDirName, "ordererOrganizations", domain,
 				"tlsca", fmt.Sprintf("tlsca.%s-cert.pem", domain))},
 		}
+
+		_, exist := organizations[orgName]
+		if !exist {
+			organizations[orgName] = Organization{
+				MSPId:      orgName,
+				CryptoPath: fmt.Sprintf("ordererOrganizations/%[1]s/users/{username}@%[1]s/msp", domain),
+			}
+		}
+
+		em := EntityMatcher{
+			Pattern:                             args[0],
+			UrlSubstitutionExp:                  fmt.Sprintf("%s:%s", args[2], args[1]),
+			SSLTargetOverrideUrlSubstitutionExp: args[0],
+			MappedHost:                          args[0],
+		}
+		if args[2] == "localhost" || args[2] == "127.0.0.1" {
+			em.UrlSubstitutionExp = fmt.Sprintf("%s:%s", args[0], args[1])
+		}
+		entityMatchers["orderer"] = append(entityMatchers["orderer"], em)
 	}
 	connProfile.Orderers = orderers
+	connProfile.Organizations = organizations
+	connProfile.EntityMatchers = entityMatchers
 
-	return nil
+	data, err := yaml.Marshal(connProfile)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal connProfile")
+	}
+	filePath = filepath.Join(filePath, defaultConnProfileName)
+	return ioutil.WriteFile(filePath, data, 0755)
 }
