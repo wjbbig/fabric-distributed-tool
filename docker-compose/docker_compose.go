@@ -135,7 +135,7 @@ func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherU
 }
 
 // GeneratePeerDockerComposeFile 生产peer的docker-compose启动文件
-func GeneratePeerDockerComposeFile(filePath string, peerUrl string, anchorPeerUrl string, otherUrls []string) error {
+func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootstrapPeerUrl string, otherUrls []string) error {
 	var dockerCompose DockerCompose
 	imageName, err := detectImageNameAndTag("fabric-peer")
 	if err != nil {
@@ -163,7 +163,7 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, anchorPeerUr
 			fmt.Sprintf("CORE_PEER_LISTENADDRESS=0.0.0.0:%s", peerUrlArgs[1]),
 			fmt.Sprintf("CORE_PEER_CHAINCODEADDRESS=%s:7052", peerUrlArgs[0]),
 			"CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:7052",
-			fmt.Sprintf("CORE_PEER_GOSSIP_BOOTSTRAP=%s", anchorPeerUrl),
+			fmt.Sprintf("CORE_PEER_GOSSIP_BOOTSTRAP=%s", gossipBootstrapPeerUrl),
 			fmt.Sprintf("CORE_PEER_GOSSIP_EXTERNALENDPOINT=%s", peerUrl),
 			fmt.Sprintf("CORE_PEER_LOCALMSPID=%sMSP", orgName),
 		},

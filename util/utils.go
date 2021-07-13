@@ -1,6 +1,12 @@
 package util
 
-import "strings"
+import (
+	"bytes"
+	"github.com/pkg/errors"
+	"os"
+	"os/exec"
+	"strings"
+)
 
 // SplitNameOrgDomain 将url拆分成节点名称,组织名称和域名
 // 默认以'.'为分割符,分割后第1个元素是节点名称,第二个是组织名,
@@ -29,4 +35,20 @@ func Indexes(str string, subStr string) []int {
 		}
 	}
 	return indexes
+}
+
+// RunLocalCmd 执行本地命令
+func RunLocalCmd(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = os.Stdout
+	var buf bytes.Buffer
+	cmd.Stderr = &buf
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	if buf.Len() != 0 {
+		return errors.Errorf("run cmd return error, err=%s", buf.String())
+	}
+
+	return nil
 }

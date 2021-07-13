@@ -108,7 +108,8 @@ func orderPeerOrdererByOrg(urls []string) map[string][]string {
 }
 
 func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers []string) error {
-	logger.Infof("begin to generate config.tx, orderer type=%s", ordererType)
+	logger.Infof("begin to generate configtx.yaml, orderer type=%s", ordererType)
+	defer logger.Info("finish generating configtx.yaml")
 	var configtx Configtx
 	var consenters []ConfigtxConsenter
 	var ordererOrganizations []ConfigtxOrganization
