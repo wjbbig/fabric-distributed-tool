@@ -11,7 +11,7 @@ import (
 
 const defaultCryptoConfigFileName = "crypto-config.yaml"
 
-var logger = log.NewLogger(log.Info)
+var logger = log.NewLogger()
 
 type CryptoConfig struct {
 	OrdererOrgs []cryptoOrdererConfig `yaml:"OrdererOrgs,omitempty"`
@@ -104,7 +104,7 @@ func GenerateCryptoConfigFile(filePath string, peers, orderers []string) error {
 	if err != nil {
 		return err
 	}
-	defer logger.Debugf("finish generating crypto-config.yaml, the content: \n%s", string(data))
+	defer logger.Info("finish generating crypto-config.yaml")
 	return ioutil.WriteFile(path, data, 0755)
 }
 
