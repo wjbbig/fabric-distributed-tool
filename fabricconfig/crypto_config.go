@@ -164,20 +164,14 @@ func GenerateLocallyTestNetworkCryptoConfig(filePath string) error {
 }
 
 // GenerateKeyPairsAndCerts 使用cryptogen工具生成peer和orderer的证书和密钥
-func GenerateKeyPairsAndCerts(fileDir string, version string) error {
+func GenerateKeyPairsAndCerts(fileDir string) error {
 	logger.Info("begin to generate key pairs and certs with crypto-config.yaml")
 	defer logger.Info("finish generating key pairs and certs")
-	switch version {
-	case "2.0":
-		version = "v20"
-	default:
-		version = "v14"
-	}
 
 	var args []string
 	args = append(args, "generate")
 	args = append(args, fmt.Sprintf("--config=%s/%s", fileDir, defaultCryptoConfigFileName))
 	args = append(args, fmt.Sprintf("--output=%s/%s", fileDir, "crypto-config"))
-	cryptogenPath := filepath.Join("tools", version, "cryptogen")
+	cryptogenPath := filepath.Join("tools", "cryptogen")
 	return util.RunLocalCmd(cryptogenPath, args...)
 }

@@ -8,6 +8,7 @@ import (
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ const (
 	ordererType_SOLO          = "solo"
 	ordererType_ETCDRAFT      = "etcdraft"
 	defaultChannelProfileName = "FabricChannel"
+	defaultGenesisChannel     = "fabric-genesis-channel"
 )
 
 type Configtx struct {
@@ -580,4 +582,57 @@ func GenerateLocallyTestNetworkConfigtx(filePath string) error {
 		return err
 	}
 	return ioutil.WriteFile(path, data, 0755)
+}
+
+func GenerateGensisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId string, peerOrgs []string) error {
+	// generate genesis.block
+	configtxgenPath := filepath.Join("tools", "configtxgen")
+	channelArtifactsPath := filepath.Join(fileDir, "channel-artifacts")
+	if err := os.MkdirAll(channelArtifactsPath, 0755); err != nil {
+		return errors.Wrapf(err, "failed to create directory, path=%s", channelArtifactsPath)
+	}
+
+	logger.Infof("begin to generate fabric genesis.block, genesis channel name is %s", defaultGenesisChannel)
+	var args []string
+	// ./configtxgen -profile TwoOrgsOrdererGenesis -channelID byfn-sys-channel -outputBlock ./channel-artifacts/genesis.block
+	args = []string{
+		fmt.Sprintf("--configPath=%s", fileDir),
+		fmt.Sprintf("--profile=%s", defaultGenesisName),
+		fmt.Sprintf("--channelID=%s", defaultGenesisChannel),
+		fmt.Sprintf("--outputBlock=%s", filepath.Join(channelArtifactsPath, "genesis.block")),
+	}
+	if err := util.RunLocalCmd(configtxgenPath, args...); err != nil {
+		return err
+	}
+
+	// generate channel transaction
+	// ./bin/configtxgen -profile TwoOrgsChannel -outputCreateChannelTx ./channel-artifacts/channel.tx -channelID $CHANNEL_NAME
+	logger.Infof("begin to generate channel.tx, channel=%s", channelId)
+	args = []string{
+		fmt.Sprintf("--configPath=%s", fileDir),
+		fmt.Sprintf("--profile=%s", defaultChannelProfileName),
+		fmt.Sprintf("--channelID=%s", channelId),
+		fmt.Sprintf("--outputCreateChannelTx=%s", filepath.Join(channelArtifactsPath, fmt.Sprintf("%s.tx", channelId))),
+	}
+	if err := util.RunLocalCmd(configtxgenPath, args...); err != nil {
+		return err
+	}
+
+	// TODO: does fabric2.x need this step???
+	// generate anchor peer transaction
+	// ./bin/configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate ./channel-artifacts/Org1anchors.tx -channelID $CHANNEL_NAME -asOrg Org1MSP
+	for _, org := range peerOrgs {
+		logger.Infof("begin to generate anchors.tx, org=%s", org)
+		args = []string{
+			fmt.Sprintf("--configPath=%s", fileDir),
+			fmt.Sprintf("--profile=%s", defaultChannelProfileName),
+			fmt.Sprintf("--channelID=%s", channelId),
+			fmt.Sprintf("--outputAnchorPeersUpdate=%s", filepath.Join(channelArtifactsPath, fmt.Sprintf("%sanchors.tx", org))),
+			fmt.Sprintf("--asOrg=%s", org),
+		}
+		if err := util.RunLocalCmd(configtxgenPath, args...); err != nil {
+			return err
+		}
+	}
+	return nil
 }

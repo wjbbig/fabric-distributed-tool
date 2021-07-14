@@ -4,9 +4,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	docker_compose "github.com/wjbbig/fabric-distributed-tool/docker-compose"
 	"github.com/wjbbig/fabric-distributed-tool/fabricconfig"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
 	"github.com/wjbbig/fabric-distributed-tool/sshutil"
+	"github.com/wjbbig/fabric-distributed-tool/util"
 	"strings"
 )
 
@@ -45,17 +47,21 @@ var generateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// TODO 完成方法
 		if err := generateSSHConfig(); err != nil {
-			return err
+			logger.Error(err.Error())
+			return nil
 		}
-
 		if err := generateCryptoConfig(); err != nil {
-			return err
+			logger.Error(err.Error())
+			return nil
 		}
-
 		if err := generateConfigtx(); err != nil {
-			return err
+			logger.Error(err.Error())
+			return nil
 		}
-
+		if err := generateDockerCompose(); err != nil {
+			logger.Error(err.Error())
+			return nil
+		}
 		return nil
 	},
 }
@@ -80,7 +86,7 @@ func generateCryptoConfig() error {
 	if err := fabricconfig.GenerateCryptoConfigFile(dataDir, peers, orderers); err != nil {
 		return err
 	}
-	if err := fabricconfig.GenerateKeyPairsAndCerts(dataDir, fabricVersion); err != nil {
+	if err := fabricconfig.GenerateKeyPairsAndCerts(dataDir); err != nil {
 		return errors.Wrap(err, "generate fabric keypairs and certs failed")
 	}
 
@@ -97,9 +103,14 @@ func generateSSHConfig() error {
 func generateConfigtx() error {
 	var peers []string
 	var orderers []string
+	var orgs []string
 	for _, url := range peerUrls {
 		index := strings.Index(url, "@")
-		peers = append(peers, url[:index])
+		peerURl := url[:index]
+		args := strings.Split(peerURl, ":")
+		_, org, _ := util.SplitNameOrgDomain(args[0])
+		peers = append(peers, peerURl)
+		orgs = append(orgs, org)
 	}
 
 	for _, url := range ordererUrls {
@@ -117,6 +128,44 @@ func generateConfigtx() error {
 	if err := fabricconfig.GenerateConfigtxFile(dataDir, consensus, orderers, peers); err != nil {
 		return err
 	}
+	if err := fabricconfig.GenerateGensisBlockAndChannelTxAndAnchorPeer(dataDir, channelId, orgs); err != nil {
+		return err
+	}
+	return nil
+}
+
+func generateDockerCompose() error {
+	var peers []string
+	var orderers []string
+	peersByOrg := make(map[string][]string)
+	for _, url := range peerUrls {
+		index := strings.Index(url, "@")
+		peerURl := url[:index]
+		args := strings.Split(peerURl, ":")
+		_, org, _ := util.SplitNameOrgDomain(args[0])
+		peers = append(peers, peerURl)
+		peersByOrg[org] = append(peersByOrg[org], peerURl)
+	}
+
+	for _, url := range ordererUrls {
+		index := strings.Index(url, ":")
+		orderers = append(orderers, url[:index])
+	}
+	for _, peer := range peers {
+		if err := docker_compose.GeneratePeerDockerComposeFile(dataDir, peer, "", nil); err != nil {
+			return err
+		}
+	}
+	for _, orderer := range orderers {
+		if err := docker_compose.GenerateOrdererDockerComposeFile(dataDir, orderer, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+//
+func spliceHostnamePortAndIP(urls []string) []string {
 
 	return nil
 }

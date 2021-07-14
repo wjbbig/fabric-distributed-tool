@@ -2,7 +2,7 @@ package util
 
 import (
 	"bytes"
-	"github.com/pkg/errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -47,8 +47,7 @@ func RunLocalCmd(name string, args ...string) error {
 		return err
 	}
 	if buf.Len() != 0 {
-		return errors.Errorf("run cmd return error, err=%s", buf.String())
+		fmt.Printf("%s\n", buf.String())
 	}
-
 	return nil
 }

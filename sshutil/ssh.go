@@ -148,7 +148,7 @@ func transferDir(localDirPath string, remoteDir string, sftpClient *sftp.Client)
 	return nil
 }
 
-// transferFile 用于传输单个文件
+// transferFile uses to transfer single file
 func transferFile(localFilePath string, remoteDir string, sftpClient *sftp.Client) error {
 	localFile, err := os.Open(localFilePath)
 	if err != nil {
