@@ -7,6 +7,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/pkg/errors"
+	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
 	"github.com/wjbbig/fabric-distributed-tool/util"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -14,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+var logger = mylogger.NewLogger()
 
 const defaultDockerComposeFile = "docker-compose-"
 const defaultNetworkName = "fabric_network"
@@ -72,12 +75,13 @@ func detectImageNameAndTag(keyword string) (string, error) {
 // GenerateOrdererDockerComposeFile 生成启动orderer的docker-compose文件
 func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherUrls []string) error {
 	var dockerCompose DockerCompose
+	ordererURLArgs := strings.Split(ordererUrl, ":")
+	logger.Infof("begin to generate docker_compose file, url=%s", ordererURLArgs[0])
 	imageName, err := detectImageNameAndTag("fabric-orderer")
 	if err != nil {
 		return err
 	}
 
-	ordererURLArgs := strings.Split(ordererUrl, ":")
 	_, orgName, domain := util.SplitNameOrgDomain(ordererURLArgs[0])
 	ordererService := Service{
 		ContainerName: ordererURLArgs[0],
@@ -109,8 +113,9 @@ func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherU
 				filePath, domain, ordererURLArgs[0]),
 			fmt.Sprintf("%s:/var/hyperledger/production/orderer", ordererURLArgs[0]),
 		},
-		Ports:    []string{fmt.Sprintf("%[1]s:%[1]s", ordererURLArgs[1])},
-		Networks: []string{defaultNetworkName},
+		Ports:      []string{fmt.Sprintf("%[1]s:%[1]s", ordererURLArgs[1])},
+		Networks:   []string{defaultNetworkName},
+		ExtraHosts: otherUrls,
 	}
 	dockerCompose.Services = map[string]Service{
 		ordererURLArgs[0]: ordererService,
@@ -131,7 +136,11 @@ func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherU
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(filePath, data, 0755)
+	if err := ioutil.WriteFile(filePath, data, 0755); err != nil {
+		return errors.Wrapf(err, "failed to write peer docker_compose file, url=%s", ordererURLArgs[0])
+	}
+	logger.Infof("finish generating peer docker_compose file, url=%s", ordererURLArgs[0])
+	return nil
 }
 
 // GeneratePeerDockerComposeFile 生产peer的docker-compose启动文件
@@ -142,6 +151,7 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 		return err
 	}
 	peerUrlArgs := strings.Split(peerUrl, ":")
+	logger.Infof("begin to generate peer docker_compose file, url=%s", peerUrlArgs[0])
 	_, orgName, domain := util.SplitNameOrgDomain(peerUrlArgs[0])
 	peerService := Service{
 		ContainerName: peerUrlArgs[0],
@@ -176,7 +186,7 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 		},
 		Ports:      []string{fmt.Sprintf("%[1]s:%[1]s", peerUrlArgs[1])},
 		Networks:   []string{defaultNetworkName},
-		ExtraHosts: nil,
+		ExtraHosts: otherUrls,
 	}
 	dockerCompose.Services = map[string]Service{
 		peerUrlArgs[0]: peerService,
@@ -198,7 +208,11 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(filePath, data, 0755)
+	if err := ioutil.WriteFile(filePath, data, 0755); err != nil {
+		return errors.Wrapf(err, "failed to write peer docker_compose file, url=%s", peerUrlArgs[0])
+	}
+	logger.Infof("finish generating peer docker_compose file, url=%s", peerUrlArgs[0])
+	return nil
 }
 
 // generateCLI 生成cli容器的docker-compose.yaml文件,2.x版本默认不再提供cli容器

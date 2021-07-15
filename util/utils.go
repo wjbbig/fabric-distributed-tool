@@ -3,6 +3,7 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -50,4 +51,28 @@ func RunLocalCmd(name string, args ...string) error {
 		fmt.Printf("%s\n", buf.String())
 	}
 	return nil
+}
+
+func SplitUrlParam(url string) (hostname string, port string, username string, ip string, sshPort string, password string) {
+	args := strings.Split(url, "@")
+	hostParam := strings.Split(args[0], ":")
+	hostname = hostParam[0]
+	port = hostParam[1]
+	username = args[1]
+	indexes := Indexes(args[2], ":")
+	password = args[2][indexes[1]+1:]
+	ip = args[2][:indexes[0]]
+	sshPort = args[2][indexes[0]+1 : indexes[1]]
+	return
+}
+
+func CheckLocalIp(ip string) (bool, error) {
+	addr, err := net.ResolveTCPAddr("tcp", ip)
+	if err != nil {
+		return false, err
+	}
+	if addr.IP.IsLoopback() || addr.IP.IsUnspecified() {
+		return true, nil
+	}
+	return false, nil
 }
