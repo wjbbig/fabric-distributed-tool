@@ -6,10 +6,16 @@ import (
 )
 
 func TestGenerateSSHConfig(t *testing.T) {
-	err := GenerateSSHConfig(".", []string{
+	urls := []string{
 		"peer0.org1.example.com:7050@root@127.0.0.1:22:password",
 		"peer8.org2.example.com:7051@ubuntu@127.0.0.1:1022:passw:ord",
-	})
+	}
+	var clients []Client
+	for _, url := range urls {
+		client := NewClient(url, "peer")
+		clients = append(clients, client)
+	}
+	err := GenerateSSHConfig(".", clients)
 
 	require.NoError(t, err)
 }

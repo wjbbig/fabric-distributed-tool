@@ -5,6 +5,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/wjbbig/fabric-distributed-tool/connectionprofile"
 	docker_compose "github.com/wjbbig/fabric-distributed-tool/docker-compose"
 	"github.com/wjbbig/fabric-distributed-tool/fabricconfig"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
@@ -70,6 +71,10 @@ var bootstrapCmd = &cobra.Command{
 			logger.Error(err.Error())
 			return nil
 		}
+		if err := generateConnectionProfile(); err != nil {
+			logger.Error(err.Error())
+			return nil
+		}
 		return nil
 	},
 }
@@ -102,10 +107,14 @@ func generateCryptoConfig() error {
 }
 
 func generateSSHConfig() error {
-	var urls []string
-	urls = append(urls, peerUrls...)
-	urls = append(urls, ordererUrls...)
-	return sshutil.GenerateSSHConfig(dataDir, urls)
+	var clients []sshutil.Client
+	for _, url := range peerUrls {
+		clients = append(clients, sshutil.NewClient(url, "peer"))
+	}
+	for _, url := range ordererUrls {
+		clients = append(clients, sshutil.NewClient(url, "orderer"))
+	}
+	return sshutil.GenerateSSHConfig(dataDir, clients)
 }
 
 func generateConfigtx() error {
@@ -166,7 +175,7 @@ func generateDockerCompose() error {
 		orgPeers := peersByOrg[org]
 		// if this org has only one peer, set this peer = gossip peer
 		if len(orgPeers) == 1 {
-			gossipUrl = args[0]
+			gossipUrl = peer
 		} else {
 			// this org has many peers. we choose one peer randomly, but exclude this peer
 			for _, orgPeer := range orgPeers {
@@ -212,4 +221,19 @@ func spliceHostnameAndIP(excludeUrl string, urls []string) (extraHosts []string)
 		extraHosts = append(extraHosts, fmt.Sprintf("%s:%s", hostname, ip))
 	}
 	return nil
+}
+
+func generateConnectionProfile() error {
+	var pUrls []string
+	var oUrls []string
+
+	for _, url := range peerUrls {
+		hostname, port, _, ip, _, _ := util.SplitUrlParam(url)
+		pUrls = append(pUrls, fmt.Sprintf("%s:%s:%s", hostname, port, ip))
+	}
+	for _, url := range ordererUrls {
+		hostname, port, _, ip, _, _ := util.SplitUrlParam(url)
+		oUrls = append(oUrls, fmt.Sprintf("%s:%s:%s", hostname, port, ip))
+	}
+	return connectionprofile.GenerateNetworkConnProfile(dataDir, channelId, pUrls, oUrls)
 }

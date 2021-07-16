@@ -175,7 +175,7 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 			"CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:7052",
 			fmt.Sprintf("CORE_PEER_GOSSIP_BOOTSTRAP=%s", gossipBootstrapPeerUrl),
 			fmt.Sprintf("CORE_PEER_GOSSIP_EXTERNALENDPOINT=%s", peerUrl),
-			fmt.Sprintf("CORE_PEER_LOCALMSPID=%sMSP", orgName),
+			fmt.Sprintf("CORE_PEER_LOCALMSPID=%s", orgName),
 		},
 		Command: "peer node start",
 		Volumes: []string{

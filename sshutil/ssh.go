@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"github.com/pkg/errors"
 	"github.com/pkg/sftp"
+	"github.com/wjbbig/fabric-distributed-tool/util"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"io/ioutil"
-	"net"
 	"os"
 	"os/exec"
 	"path"
@@ -16,15 +16,15 @@ import (
 )
 
 type SSHUtil struct {
-	remoteClients map[string]*sshClient
+	remoteClients map[string]*SSHClient
 }
 
 func NewSSHUtil() *SSHUtil {
-	return &SSHUtil{make(map[string]*sshClient)}
+	return &SSHUtil{make(map[string]*SSHClient)}
 }
 
-func (su *SSHUtil) Add(peerName, username, password, address string) error {
-	cli, err := NewSSHClient(username, password, address)
+func (su *SSHUtil) Add(peerName, username, password, address, nodeType string) error {
+	cli, err := newSSHClient(username, password, address, nodeType)
 	if err != nil {
 		return err
 	}
@@ -32,28 +32,26 @@ func (su *SSHUtil) Add(peerName, username, password, address string) error {
 	return nil
 }
 
-type sshClient struct {
+func (su *SSHUtil) Clients() map[string]*SSHClient {
+	return su.remoteClients
+}
+
+type SSHClient struct {
 	username string
 	password string
 	address  string
+	nodeType string
 	local    bool
 	client   *ssh.Client
 }
 
-func NewSSHClient(username, password, address string) (*sshClient, error) {
-	addr, err := net.ResolveTCPAddr("tcp", address)
-	if err != nil {
-		return nil, err
-	}
-	var local bool
-	if addr.IP.IsLoopback() || addr.IP.IsUnspecified() {
-		local = true
-	}
-
-	cli := &sshClient{
+func newSSHClient(username, password, address, nodeType string) (*SSHClient, error) {
+	local, err := util.CheckLocalIp(address)
+	cli := &SSHClient{
 		username: username,
 		password: password,
-		address:  addr.String(),
+		address:  address,
+		nodeType: nodeType,
 		local:    local,
 	}
 
@@ -69,8 +67,12 @@ func NewSSHClient(username, password, address string) (*sshClient, error) {
 	return cli, nil
 }
 
+func (cli *SSHClient) GetNodeType() string {
+	return cli.nodeType
+}
+
 // RunCmd 执行命令
-func (cli *sshClient) RunCmd(cmd string) error {
+func (cli *SSHClient) RunCmd(cmd string) error {
 	var buffer bytes.Buffer
 	if cli.local {
 		args := strings.Split(cmd, " ")
@@ -102,7 +104,7 @@ func (cli *sshClient) RunCmd(cmd string) error {
 }
 
 // Sftp 传输文件
-func (cli *sshClient) Sftp(localFilePath string, remoteDir string) error {
+func (cli *SSHClient) Sftp(localFilePath string, remoteDir string) error {
 	// 本地节点不用移动文件
 	if cli.local {
 		return nil
@@ -181,7 +183,7 @@ func transferFile(localFilePath string, remoteDir string, sftpClient *sftp.Clien
 	return nil
 }
 
-func (cli *sshClient) Close() error {
+func (cli *SSHClient) Close() error {
 	if cli.client != nil {
 		return cli.client.Close()
 	}

@@ -3,6 +3,7 @@ package connectionprofile
 import (
 	"fmt"
 	"github.com/pkg/errors"
+	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
 	"github.com/wjbbig/fabric-distributed-tool/util"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -14,6 +15,8 @@ const (
 	defaultConnProfileName     = "connection-config.yaml"
 	defaultCryptoConfigDirName = "crypto-config"
 )
+
+var logger = mylogger.NewLogger()
 
 // ConnProfile 生成fabric-sdk-go使用的连接文件
 type ConnProfile struct {
@@ -195,6 +198,7 @@ type EntityMatcher struct {
 
 // GenerateNetworkConnProfile 生成连接文件,peer和orderer的格式必须是url:port:ip
 func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ordererUrls []string) error {
+	logger.Info("begin to generate fabric-sdk-go connection profile")
 	var connProfile ConnProfile
 	connProfile.Version = "1.0.0"
 	client := Client{
@@ -327,5 +331,9 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 		return errors.Wrap(err, "failed to marshal connProfile")
 	}
 	filePath = filepath.Join(filePath, defaultConnProfileName)
-	return ioutil.WriteFile(filePath, data, 0755)
+	if err := ioutil.WriteFile(filePath, data, 0755); err != nil {
+		return errors.Wrap(err, "failed to write connection profile")
+	}
+	logger.Info("finish generating fabric-sdk-go connection profile")
+	return nil
 }
