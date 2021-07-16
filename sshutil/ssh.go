@@ -175,7 +175,7 @@ func transferFile(localFilePath string, remoteDir string, sftpClient *sftp.Clien
 		if n == 0 {
 			break
 		}
-		_, err := dstFile.Write(buf)
+		_, err := dstFile.Write(buf[:n])
 		if err != nil && err != io.EOF {
 			return errors.Wrap(err, "failed to write remote file")
 		}
