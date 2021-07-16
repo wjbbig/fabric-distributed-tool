@@ -41,6 +41,8 @@ var startupCmd = &cobra.Command{
 			logger.Error(err.Error())
 			return nil
 		}
+		defer sshUtil.CloseAll()
+
 		if err := transferFilesByPeerName(sshUtil); err != nil {
 			logger.Error(err.Error())
 			return nil
@@ -49,7 +51,10 @@ var startupCmd = &cobra.Command{
 			logger.Error(err.Error())
 			return nil
 		}
+		// if only starting the fabric docker container
+		if startOnly {return nil}
 
+		// todo
 		return nil
 	},
 }
@@ -109,15 +114,27 @@ func transferFilesByPeerName(sshUtil *sshutil.SSHUtil) error {
 			return err
 		}
 
-		dockercomposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
-		if err = client.Sftp(dockercomposeFilePath, dataDir); err != nil {
+		dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
+		if err = client.Sftp(dockerComposeFilePath, dataDir); err != nil {
 			return err
 		}
+
+		// todo transfer chaincode files
 	}
 	return nil
 }
 
 func startupNetwork(sshUtil *sshutil.SSHUtil) error {
+	for name, client := range sshUtil.Clients() {
+		dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
+		// start node
+		if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s up -d", dockerComposeFilePath)); err != nil {
+			return err
+		}
+		// TODO start ca if chosen
 
+		// TODO start couchdb if chosen
+	}
 	return nil
 }
+

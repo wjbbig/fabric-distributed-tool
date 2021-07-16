@@ -1,6 +1,7 @@
 package sdkutil
 
 import (
+	"fmt"
 	mspclient "github.com/hyperledger/fabric-sdk-go/pkg/client/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/resmgmt"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/errors/retry"
@@ -8,10 +9,11 @@ import (
 	"github.com/hyperledger/fabric-sdk-go/pkg/core/config"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
 	"github.com/pkg/errors"
-	"log"
+	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
+	"path/filepath"
 )
 
-//var log
+var logger = mylogger.NewLogger()
 
 // 与fabric-sdk-go相关的方法
 
@@ -21,36 +23,30 @@ const defaultUsername = "Admin"
 
 type FabricSDKDriver struct {
 	connProfilePath string
-	fabSDK          map[string]*fabsdk.FabricSDK
+	fabSDK         *fabsdk.FabricSDK
 }
 
-// NewFabricSDKDriver
-func NewFabricSDKDriver(connProfilePath string, channelId string) (*FabricSDKDriver, error) {
+// NewFabricSDKDriver creates a fabric-sdk-go instance using specified connection profile
+func NewFabricSDKDriver(connProfilePath string) (*FabricSDKDriver, error) {
 	sdk, err := fabsdk.New(config.FromFile(connProfilePath))
 	if err != nil {
 		return nil, err
 	}
-	sdks := make(map[string]*fabsdk.FabricSDK)
-	sdks[channelId] = sdk
-	return &FabricSDKDriver{connProfilePath, sdks}, nil
+	return &FabricSDKDriver{connProfilePath, sdk}, nil
 }
 
 // CreateChannel 使用sdk创建指定名称的通道
-func (driver *FabricSDKDriver) CreateChannel(channelId string, orgId string) error {
-	sdk, exist := driver.fabSDK[channelId]
-	if !exist {
-		return errors.Errorf("connProfile file not exists. name=%s", channelId)
-	}
-	clientContext := sdk.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
+func (driver *FabricSDKDriver) CreateChannel(channelId string, orgId string, fileDir string, ordererEndpoint string) error {
+	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
 	resMgmtClient, err := resmgmt.New(clientContext)
 	if err != nil {
 		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
 	}
 
-	return createChannel(sdk, resMgmtClient, channelId, orgId)
+	return createChannel(driver.fabSDK, resMgmtClient, channelId, orgId, fileDir, ordererEndpoint)
 }
 
-func createChannel(sdk *fabsdk.FabricSDK, resMgmtClient *resmgmt.Client, channelId, orgId string) error {
+func createChannel(sdk *fabsdk.FabricSDK, resMgmtClient *resmgmt.Client, channelId, orgId, fileDir, ordererEndpoint string) error {
 	mspClient, err := mspclient.New(sdk.Context(), mspclient.WithOrg(orgId))
 	if err != nil {
 		return err
@@ -61,34 +57,44 @@ func createChannel(sdk *fabsdk.FabricSDK, resMgmtClient *resmgmt.Client, channel
 	}
 	createChannelReq := resmgmt.SaveChannelRequest{
 		ChannelID: channelId,
-		// TODO 补充这里的路径
-		ChannelConfigPath: "",
+		ChannelConfigPath: filepath.Join(fileDir, "channel-artifacts", fmt.Sprintf("%s.tx", channelId)),
 		SigningIdentities: []msp.SigningIdentity{adminIdentity},
 	}
 	resp, err := resMgmtClient.SaveChannel(createChannelReq, resmgmt.WithRetry(retry.DefaultResMgmtOpts),
-		// TODO 这里需要输入一个orderer的名字
-		resmgmt.WithOrdererEndpoint("orderer.example.com"))
+		resmgmt.WithOrdererEndpoint(ordererEndpoint))
 	if err != nil {
 		return err
 	}
-	log.Printf("create channel %s success, txId=%s", channelId, resp.TransactionID)
+	logger.Infof("create channel %s success, txId=%s", channelId, resp.TransactionID)
 	return nil
 }
 
-func (driver *FabricSDKDriver) JoinChannel(channelId string, orgId string) error {
-	sdk, exist := driver.fabSDK[channelId]
-	if !exist {
-		return errors.Errorf("connProfile file not exists. name=%s", channelId)
-	}
-	adminContext := sdk.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
+func (driver *FabricSDKDriver) JoinChannel(channelId string, orgId string, ordererEndpoint string) error {
+	adminContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
 	orgResMgmt, err := resmgmt.New(adminContext)
 	if err != nil {
 		return errors.Wrap(err, "failed to create new resource management client")
 	}
 	if err = orgResMgmt.JoinChannel(channelId, resmgmt.WithRetry(retry.DefaultResMgmtOpts),
-		resmgmt.WithOrdererEndpoint("")); err != nil {
+		resmgmt.WithOrdererEndpoint(ordererEndpoint)); err != nil {
 		return errors.Wrapf(err, "%s peers failed to join channel %s", orgId, channelId)
 	}
-	log.Printf("org %s peers join channel %s success", orgId, channelId)
+	logger.Infof("org %s peers join channel %s success", orgId, channelId)
 	return nil
+}
+
+func (driver *FabricSDKDriver) InstallChaincode() error {
+	return nil
+}
+
+func (driver *FabricSDKDriver) InstantiateChaincode() error {
+	return nil
+}
+
+func (driver *FabricSDKDriver) UpdateChaincode() error {
+	return nil
+}
+
+func (driver *FabricSDKDriver) Close() {
+	driver.fabSDK.Close()
 }

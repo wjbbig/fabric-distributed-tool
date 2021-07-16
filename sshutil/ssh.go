@@ -36,6 +36,12 @@ func (su *SSHUtil) Clients() map[string]*SSHClient {
 	return su.remoteClients
 }
 
+func (su *SSHUtil) CloseAll() {
+	for _, client := range su.remoteClients {
+		client.Close()
+	}
+}
+
 type SSHClient struct {
 	username string
 	password string
