@@ -6,7 +6,7 @@ require (
 	github.com/containerd/containerd v1.5.2 // indirect
 	github.com/docker/docker v20.10.7+incompatible
 	github.com/docker/go-connections v0.4.0 // indirect
-	//github.com/hyperledger/fabric v2.1.0
+	github.com/hyperledger/fabric v1.4.12 // indirect
 	github.com/hyperledger/fabric-config v0.1.0
 	github.com/hyperledger/fabric-protos-go v0.0.0-20210528200356-82833ecdac31 // indirect
 	github.com/hyperledger/fabric-sdk-go v1.0.0
