@@ -2,8 +2,8 @@ package generate
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/wjbbig/fabric-distributed-tool/cmd/generate/bootstrap"
-	"github.com/wjbbig/fabric-distributed-tool/cmd/generate/extend"
+	"github.com/wjbbig/fabric-distributed-tool/cmd/network/generate/bootstrap"
+	"github.com/wjbbig/fabric-distributed-tool/cmd/network/generate/extend"
 )
 
 var (

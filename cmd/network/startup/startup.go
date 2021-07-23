@@ -52,7 +52,9 @@ var startupCmd = &cobra.Command{
 			return nil
 		}
 		// if only starting the fabric docker container
-		if startOnly {return nil}
+		if startOnly {
+			return nil
+		}
 
 		// todo
 		return nil
@@ -137,4 +139,3 @@ func startupNetwork(sshUtil *sshutil.SSHUtil) error {
 	}
 	return nil
 }
-
