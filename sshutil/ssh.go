@@ -53,6 +53,9 @@ type SSHClient struct {
 
 func newSSHClient(username, password, address, nodeType string) (*SSHClient, error) {
 	local, err := util.CheckLocalIp(address)
+	if err != nil {
+		return nil, err
+	}
 	cli := &SSHClient{
 		username: username,
 		password: password,

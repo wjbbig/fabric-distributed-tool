@@ -1,6 +1,6 @@
 module github.com/wjbbig/fabric-distributed-tool
 
-go 1.15
+go 1.16
 
 require (
 	github.com/containerd/containerd v1.5.2 // indirect
