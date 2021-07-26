@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	log "github.com/wjbbig/fabric-distributed-tool/logger"
-	"github.com/wjbbig/fabric-distributed-tool/util"
+	"github.com/wjbbig/fabric-distributed-tool/utils"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"path/filepath"
@@ -60,7 +60,7 @@ func GenerateCryptoConfigFile(filePath string, peers, orderers []string) error {
 
 	ordererMap := make(map[string]cryptoOrdererConfig)
 	for _, ordererUrl := range orderers {
-		ordererName, ordererOrg, ordererDomain := util.SplitNameOrgDomain(ordererUrl)
+		ordererName, ordererOrg, ordererDomain := utils.SplitNameOrgDomain(ordererUrl)
 		oc, ok := ordererMap[ordererDomain]
 		if !ok {
 			ordererMap[ordererDomain] = cryptoOrdererConfig{
@@ -80,7 +80,7 @@ func GenerateCryptoConfigFile(filePath string, peers, orderers []string) error {
 	}
 	peerMap := make(map[string]cryptoPeerConfig)
 	for _, peerUrl := range peers {
-		peerName, peerOrg, peerDomain := util.SplitNameOrgDomain(peerUrl)
+		peerName, peerOrg, peerDomain := utils.SplitNameOrgDomain(peerUrl)
 		pc, ok := peerMap[peerDomain]
 		if !ok {
 			peerMap[peerDomain] = cryptoPeerConfig{
@@ -173,5 +173,5 @@ func GenerateKeyPairsAndCerts(fileDir string) error {
 	args = append(args, fmt.Sprintf("--config=%s/%s", fileDir, defaultCryptoConfigFileName))
 	args = append(args, fmt.Sprintf("--output=%s/%s", fileDir, "crypto-config"))
 	cryptogenPath := filepath.Join("tools", "cryptogen")
-	return util.RunLocalCmd(cryptogenPath, args...)
+	return utils.RunLocalCmd(cryptogenPath, args...)
 }

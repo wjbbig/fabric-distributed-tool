@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
-	"github.com/wjbbig/fabric-distributed-tool/util"
+	"github.com/wjbbig/fabric-distributed-tool/utils"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"path/filepath"
@@ -230,7 +230,7 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 		if len(args) != 3 {
 			return errors.Errorf("the peer url should be url:port:ip, but got %s", url)
 		}
-		_, orgName, domain := util.SplitNameOrgDomain(args[0])
+		_, orgName, domain := utils.SplitNameOrgDomain(args[0])
 		// peer
 		peers[args[0]] = Peer{
 			URL: fmt.Sprintf("%s:%s", args[0], args[1]),
@@ -288,7 +288,7 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 		if len(args) != 3 {
 			return errors.Errorf("the orderer url should be url:port:ip, but got %s", url)
 		}
-		_, orgName, domain := util.SplitNameOrgDomain(args[0])
+		_, orgName, domain := utils.SplitNameOrgDomain(args[0])
 		orderers[args[0]] = Orderer{
 			URL: fmt.Sprintf("%s:%s", args[0], args[1]),
 			GRPCOptions: GRPCOptions{
@@ -312,7 +312,8 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 		}
 
 		em := EntityMatcher{
-			Pattern:                             args[0],
+			Pattern: args[0],
+			//todo use ip address instead of hostname
 			UrlSubstitutionExp:                  fmt.Sprintf("%s:%s", args[2], args[1]),
 			SSLTargetOverrideUrlSubstitutionExp: args[0],
 			MappedHost:                          args[0],

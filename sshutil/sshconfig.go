@@ -2,7 +2,7 @@ package sshutil
 
 import (
 	"github.com/pkg/errors"
-	"github.com/wjbbig/fabric-distributed-tool/util"
+	"github.com/wjbbig/fabric-distributed-tool/utils"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"path/filepath"
@@ -47,7 +47,7 @@ func NewClient(clientUrl string, nodeType string) Client {
 			args[2] += args[i]
 		}
 	}
-	indexes := util.Indexes(args[2], ":")
+	indexes := utils.Indexes(args[2], ":")
 	return Client{
 		Name:     name,
 		Username: username,

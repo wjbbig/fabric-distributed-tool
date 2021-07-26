@@ -4,7 +4,7 @@ import (
 	"fmt"
 	fconfigtx "github.com/hyperledger/fabric-config/configtx"
 	"github.com/pkg/errors"
-	"github.com/wjbbig/fabric-distributed-tool/util"
+	"github.com/wjbbig/fabric-distributed-tool/utils"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"math/rand"
@@ -103,7 +103,7 @@ type ConfigtxApplication struct {
 func orderPeerOrdererByOrg(urls []string) map[string][]string {
 	orderedUrl := make(map[string][]string)
 	for _, url := range urls {
-		_, org, _ := util.SplitNameOrgDomain(url)
+		_, org, _ := utils.SplitNameOrgDomain(url)
 		orderedUrl[org] = append(orderedUrl[org], url)
 	}
 	return orderedUrl
@@ -120,7 +120,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 	for _, ordererUrls := range ordererMap {
 		for _, url := range ordererUrls {
 			ordererArgs := strings.Split(url, ":")
-			_, _, ordererDomain := util.SplitNameOrgDomain(ordererArgs[0])
+			_, _, ordererDomain := utils.SplitNameOrgDomain(ordererArgs[0])
 			serverCertPath := filepath.Join(ordererOrgsPath, ordererDomain, "orderers", ordererArgs[0], "tls/server.crt")
 			port, err := strconv.Atoi(ordererArgs[1])
 			if err != nil {
@@ -135,7 +135,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 			consenters = append(consenters, consenter)
 		}
 		ordererArgs := strings.Split(ordererUrls[0], ":")
-		_, ordererOrgName, ordererDomain := util.SplitNameOrgDomain(ordererArgs[0])
+		_, ordererOrgName, ordererDomain := utils.SplitNameOrgDomain(ordererArgs[0])
 
 		ordererOrganization := ConfigtxOrganization{
 			Name:   ordererOrgName,
@@ -210,7 +210,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 			Port: uint32(port),
 		}
 		anchorPeers = append(anchorPeers, anchorPeer)
-		_, org, domain := util.SplitNameOrgDomain(peerArgs[0])
+		_, org, domain := utils.SplitNameOrgDomain(peerArgs[0])
 		peerOrganization := ConfigtxOrganization{
 			Name:   org,
 			ID:     org,
@@ -601,7 +601,7 @@ func GenerateGensisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId stri
 		fmt.Sprintf("--channelID=%s", defaultGenesisChannel),
 		fmt.Sprintf("--outputBlock=%s", filepath.Join(channelArtifactsPath, "genesis.block")),
 	}
-	if err := util.RunLocalCmd(configtxgenPath, args...); err != nil {
+	if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
 		return err
 	}
 
@@ -614,7 +614,7 @@ func GenerateGensisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId stri
 		fmt.Sprintf("--channelID=%s", channelId),
 		fmt.Sprintf("--outputCreateChannelTx=%s", filepath.Join(channelArtifactsPath, fmt.Sprintf("%s.tx", channelId))),
 	}
-	if err := util.RunLocalCmd(configtxgenPath, args...); err != nil {
+	if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
 		return err
 	}
 
@@ -630,7 +630,7 @@ func GenerateGensisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId stri
 			fmt.Sprintf("--outputAnchorPeersUpdate=%s", filepath.Join(channelArtifactsPath, fmt.Sprintf("%sanchors.tx", org))),
 			fmt.Sprintf("--asOrg=%s", org),
 		}
-		if err := util.RunLocalCmd(configtxgenPath, args...); err != nil {
+		if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
 			return err
 		}
 	}

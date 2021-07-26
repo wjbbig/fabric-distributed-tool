@@ -1,14 +1,10 @@
 package startup
 
 import (
-	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/wjbbig/fabric-distributed-tool/cmd/network/utils"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
-	"github.com/wjbbig/fabric-distributed-tool/sshutil"
-	"github.com/wjbbig/fabric-distributed-tool/util"
-	"path/filepath"
-	"strings"
 )
 
 var logger = mylogger.NewLogger()
@@ -36,18 +32,18 @@ var startupCmd = &cobra.Command{
 		if dataDir == "" {
 			logger.Error("datadir is not specified")
 		}
-		sshUtil, err := readSSHConfig()
+		sshUtil, err := utils.ReadSSHConfig(dataDir)
 		if err != nil {
 			logger.Error(err.Error())
 			return nil
 		}
 		defer sshUtil.CloseAll()
 
-		if err := transferFilesByPeerName(sshUtil); err != nil {
+		if err := utils.TransferFilesByPeerName(sshUtil, dataDir); err != nil {
 			logger.Error(err.Error())
 			return nil
 		}
-		if err := startupNetwork(sshUtil); err != nil {
+		if err := utils.StartupNetwork(sshUtil, dataDir); err != nil {
 			logger.Error(err.Error())
 			return nil
 		}
@@ -78,64 +74,4 @@ func resetFlags() {
 	flags.StringVar(&chaincodeId, "chaincodeid", "", "Chaincode Name")
 	flags.StringVar(&chaincodePath, "path", "", "Chaincode path")
 	flags.StringVar(&initParam, "initparam", "", "Chaincode Init params")
-}
-
-func readSSHConfig() (*sshutil.SSHUtil, error) {
-	sshConfig, err := sshutil.UnmarshalSSHConfig(dataDir)
-	if err != nil {
-		return nil, err
-	}
-	sshUtil := sshutil.NewSSHUtil()
-	for _, client := range sshConfig.Clients {
-		if err := sshUtil.Add(client.Name, client.Username, client.Password, fmt.Sprintf("%s:%s", client.Host, client.Port), client.Type); err != nil {
-			return nil, err
-		}
-	}
-	return sshUtil, nil
-}
-
-func transferFilesByPeerName(sshUtil *sshutil.SSHUtil) error {
-	ordererCryptoConfigPrefix := filepath.Join(dataDir, "crypto-config", "ordererOrganizations")
-	peerCryptoConfigPrefix := filepath.Join(dataDir, "crypto-config", "peerOrganizations")
-	for name, client := range sshUtil.Clients() {
-		_, orgName, _ := util.SplitNameOrgDomain(name)
-		// send node self keypairs and certs
-		var certDir string
-		if client.GetNodeType() == "peer" {
-			certDir = filepath.Join(peerCryptoConfigPrefix, orgName)
-		} else {
-			certDir = filepath.Join(ordererCryptoConfigPrefix, orgName)
-		}
-		err := client.Sftp(certDir, certDir)
-		if err != nil {
-			return err
-		}
-		// send genesis.block, channel.tx and anchor.tx
-		channelArtifactsPath := filepath.Join(dataDir, "channel-artifacts")
-		if err = client.Sftp(channelArtifactsPath, channelArtifactsPath); err != nil {
-			return err
-		}
-
-		dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
-		if err = client.Sftp(dockerComposeFilePath, dataDir); err != nil {
-			return err
-		}
-
-		// todo transfer chaincode files
-	}
-	return nil
-}
-
-func startupNetwork(sshUtil *sshutil.SSHUtil) error {
-	for name, client := range sshUtil.Clients() {
-		dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
-		// start node
-		if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s up -d", dockerComposeFilePath)); err != nil {
-			return err
-		}
-		// TODO start ca if chosen
-
-		// TODO start couchdb if chosen
-	}
-	return nil
 }

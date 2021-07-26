@@ -7,9 +7,11 @@ import (
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/errors/retry"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/core/config"
+	"github.com/hyperledger/fabric-sdk-go/pkg/fab/ccpackager/gopackager"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
 	"github.com/pkg/errors"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
+	"os"
 	"path/filepath"
 )
 
@@ -23,7 +25,7 @@ const defaultUsername = "Admin"
 
 type FabricSDKDriver struct {
 	connProfilePath string
-	fabSDK         *fabsdk.FabricSDK
+	fabSDK          *fabsdk.FabricSDK
 }
 
 // NewFabricSDKDriver creates a fabric-sdk-go instance using specified connection profile
@@ -35,7 +37,7 @@ func NewFabricSDKDriver(connProfilePath string) (*FabricSDKDriver, error) {
 	return &FabricSDKDriver{connProfilePath, sdk}, nil
 }
 
-// CreateChannel 使用sdk创建指定名称的通道
+// CreateChannel creates a channel with specified channelId
 func (driver *FabricSDKDriver) CreateChannel(channelId string, orgId string, fileDir string, ordererEndpoint string) error {
 	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
 	resMgmtClient, err := resmgmt.New(clientContext)
@@ -56,7 +58,7 @@ func createChannel(sdk *fabsdk.FabricSDK, resMgmtClient *resmgmt.Client, channel
 		return err
 	}
 	createChannelReq := resmgmt.SaveChannelRequest{
-		ChannelID: channelId,
+		ChannelID:         channelId,
 		ChannelConfigPath: filepath.Join(fileDir, "channel-artifacts", fmt.Sprintf("%s.tx", channelId)),
 		SigningIdentities: []msp.SigningIdentity{adminIdentity},
 	}
@@ -83,15 +85,53 @@ func (driver *FabricSDKDriver) JoinChannel(channelId string, orgId string, order
 	return nil
 }
 
-func (driver *FabricSDKDriver) InstallChaincode() error {
+func (driver *FabricSDKDriver) InstallCC(ccId, ccPath, ccVersion, channelId, orgId string) error {
+	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
+	resMgmtClient, err := resmgmt.New(clientContext)
+	if err != nil {
+		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
+	}
+	gopath := os.Getenv("GOPATH")
+	ccPkg, err := gopackager.NewCCPackage(ccPath, gopath)
+	if err != nil {
+		return errors.Wrapf(err, "package chaincode failed")
+	}
+	installCCReq := resmgmt.InstallCCRequest{Name: ccId, Path: ccPath, Version: ccVersion, Package: ccPkg}
+	_, err = resMgmtClient.InstallCC(installCCReq, resmgmt.WithRetry(retry.DefaultResMgmtOpts))
+	if err != nil {
+		return errors.Wrapf(err, "install chaincode failed")
+	}
+	logger.Infof("install chaincode %s on %s success", ccId, orgId)
 	return nil
 }
 
-func (driver *FabricSDKDriver) InstantiateChaincode() error {
+func (driver *FabricSDKDriver) InstantiateCC(ccId, ccPath, ccVersion, channelId, orgId, policy string, initArgs []string) error {
+	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
+	resMgmtClient, err := resmgmt.New(clientContext)
+	if err != nil {
+		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
+	}
+
+	response, err := resMgmtClient.InstantiateCC(
+		channelId,
+		resmgmt.InstantiateCCRequest{Name: ccId, Path: ccPath, Version: ccVersion, Args: func(args []string) [][]byte {
+			var argBytes [][]byte
+			for _, arg := range args {
+				argBytes = append(argBytes, []byte(arg))
+			}
+			return argBytes
+			// todo policy
+		}(initArgs), Policy: nil},
+		resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+	)
+	if err != nil {
+		return errors.Wrap(err, "instantiate chaincode failed")
+	}
+	logger.Infof("instantiate chaincode %s success, txid=%s", ccId, response.TransactionID)
 	return nil
 }
 
-func (driver *FabricSDKDriver) UpdateChaincode() error {
+func (driver *FabricSDKDriver) UpdateCC() error {
 	return nil
 }
 

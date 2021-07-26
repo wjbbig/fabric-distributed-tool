@@ -8,7 +8,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/pkg/errors"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
-	"github.com/wjbbig/fabric-distributed-tool/util"
+	"github.com/wjbbig/fabric-distributed-tool/utils"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
@@ -82,7 +82,7 @@ func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherU
 		return err
 	}
 
-	_, orgName, domain := util.SplitNameOrgDomain(ordererURLArgs[0])
+	_, orgName, domain := utils.SplitNameOrgDomain(ordererURLArgs[0])
 	ordererService := Service{
 		ContainerName: ordererURLArgs[0],
 		Image:         imageName,
@@ -111,7 +111,7 @@ func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherU
 				filePath, domain, ordererURLArgs[0]),
 			fmt.Sprintf("%s/crypto-config/ordererOrganizations/%s/orderers/%s/tls/:/var/hyperledger/orderer/tls",
 				filePath, domain, ordererURLArgs[0]),
-			fmt.Sprintf("%s:/var/hyperledger/production/orderer", ordererURLArgs[0]),
+			// fmt.Sprintf("%s:/var/hyperledger/production/orderer", ordererURLArgs[0]),
 		},
 		Ports:      []string{fmt.Sprintf("%[1]s:%[1]s", ordererURLArgs[1])},
 		Networks:   []string{defaultNetworkName},
@@ -125,7 +125,7 @@ func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherU
 		defaultNetworkName: {},
 	}
 	_, err = os.Stat(filePath)
-	if err != err {
+	if err != nil {
 		if err = os.MkdirAll(filePath, 0755); err != nil {
 			return err
 		}
@@ -152,7 +152,7 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 	}
 	peerUrlArgs := strings.Split(peerUrl, ":")
 	logger.Infof("begin to generate peer docker_compose file, url=%s", peerUrlArgs[0])
-	_, orgName, domain := util.SplitNameOrgDomain(peerUrlArgs[0])
+	_, orgName, domain := utils.SplitNameOrgDomain(peerUrlArgs[0])
 	peerService := Service{
 		ContainerName: peerUrlArgs[0],
 		Image:         imageName,
@@ -182,7 +182,7 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 			"/var/run/:/host/var/run/",
 			fmt.Sprintf("%s/crypto-config/peerOrganizations/%s/peers/%s/msp:/etc/hyperledger/fabric/msp", filePath, domain, peerUrlArgs[0]),
 			fmt.Sprintf("%s/crypto-config/peerOrganizations/%s/peers/%s/tls:/etc/hyperledger/fabric/tls", filePath, domain, peerUrlArgs[0]),
-			fmt.Sprintf("%s:/var/hyperledger/production", peerUrlArgs[0]),
+			// fmt.Sprintf("%s:/var/hyperledger/production", peerUrlArgs[0]),
 		},
 		Ports:      []string{fmt.Sprintf("%[1]s:%[1]s", peerUrlArgs[1])},
 		Networks:   []string{defaultNetworkName},
@@ -197,7 +197,7 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 	}
 	// 先创建文件夹
 	_, err = os.Stat(filePath)
-	if err != err {
+	if err != nil {
 		if err = os.MkdirAll(filePath, 0755); err != nil {
 			return err
 		}

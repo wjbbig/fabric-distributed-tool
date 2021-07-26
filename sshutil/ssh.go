@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"github.com/pkg/errors"
 	"github.com/pkg/sftp"
-	"github.com/wjbbig/fabric-distributed-tool/util"
+	"github.com/wjbbig/fabric-distributed-tool/utils"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"io/ioutil"
@@ -52,7 +52,7 @@ type SSHClient struct {
 }
 
 func newSSHClient(username, password, address, nodeType string) (*SSHClient, error) {
-	local, err := util.CheckLocalIp(address)
+	local, err := utils.CheckLocalIp(address)
 	if err != nil {
 		return nil, err
 	}
