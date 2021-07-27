@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -153,13 +154,14 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 	peerUrlArgs := strings.Split(peerUrl, ":")
 	logger.Infof("begin to generate peer docker_compose file, url=%s", peerUrlArgs[0])
 	_, orgName, domain := utils.SplitNameOrgDomain(peerUrlArgs[0])
+	networkPrefix := path.Base(filePath)
 	peerService := Service{
 		ContainerName: peerUrlArgs[0],
 		Image:         imageName,
 		WorkingDir:    "/opt/gopath/src/github.com/hyperledger/fabric/peer",
 		Environment: []string{
 			"CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock",
-			"CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fabric_network",
+			fmt.Sprintf("CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=%s_fabric_network", networkPrefix),
 			"FABRIC_LOGGING_SPEC=INFO",
 			"CORE_PEER_TLS_ENABLED=true",
 			"CORE_PEER_GOSSIP_USELEADERELECTION=true",
