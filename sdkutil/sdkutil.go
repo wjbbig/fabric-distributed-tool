@@ -9,6 +9,7 @@ import (
 	"github.com/hyperledger/fabric-sdk-go/pkg/core/config"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fab/ccpackager/gopackager"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
+	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/common/policydsl"
 	"github.com/pkg/errors"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
 	"os"
@@ -71,21 +72,23 @@ func createChannel(sdk *fabsdk.FabricSDK, resMgmtClient *resmgmt.Client, channel
 	return nil
 }
 
-func (driver *FabricSDKDriver) JoinChannel(channelId string, orgId string, ordererEndpoint string) error {
+func (driver *FabricSDKDriver) JoinChannel(channelId string, orgId string, ordererEndpoint string, peerEndpoint string) error {
 	adminContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
 	orgResMgmt, err := resmgmt.New(adminContext)
 	if err != nil {
 		return errors.Wrap(err, "failed to create new resource management client")
 	}
-	if err = orgResMgmt.JoinChannel(channelId, resmgmt.WithRetry(retry.DefaultResMgmtOpts),
-		resmgmt.WithOrdererEndpoint(ordererEndpoint)); err != nil {
+	if err = orgResMgmt.JoinChannel(channelId,
+		resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+		resmgmt.WithOrdererEndpoint(ordererEndpoint),
+		resmgmt.WithTargetEndpoints(peerEndpoint)); err != nil {
 		return errors.Wrapf(err, "%s peers failed to join channel %s", orgId, channelId)
 	}
-	logger.Infof("org %s peers join channel %s success", orgId, channelId)
+	logger.Infof("peer %s joins channel %s success", orgId, channelId)
 	return nil
 }
 
-func (driver *FabricSDKDriver) InstallCC(ccId, ccPath, ccVersion, channelId, orgId string) error {
+func (driver *FabricSDKDriver) InstallCC(ccId, ccPath, ccVersion, channelId, orgId, peerEndpoint string) error {
 	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
 	resMgmtClient, err := resmgmt.New(clientContext)
 	if err != nil {
@@ -97,7 +100,9 @@ func (driver *FabricSDKDriver) InstallCC(ccId, ccPath, ccVersion, channelId, org
 		return errors.Wrapf(err, "package chaincode failed")
 	}
 	installCCReq := resmgmt.InstallCCRequest{Name: ccId, Path: ccPath, Version: ccVersion, Package: ccPkg}
-	_, err = resMgmtClient.InstallCC(installCCReq, resmgmt.WithRetry(retry.DefaultResMgmtOpts))
+	_, err = resMgmtClient.InstallCC(installCCReq,
+		resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+		resmgmt.WithTargetEndpoints(peerEndpoint))
 	if err != nil {
 		return errors.Wrapf(err, "install chaincode failed")
 	}
@@ -105,24 +110,21 @@ func (driver *FabricSDKDriver) InstallCC(ccId, ccPath, ccVersion, channelId, org
 	return nil
 }
 
-func (driver *FabricSDKDriver) InstantiateCC(ccId, ccPath, ccVersion, channelId, orgId, policy string, initArgs []string) error {
+func (driver *FabricSDKDriver) InstantiateCC(ccId, ccPath, ccVersion, channelId, orgId, policy, peerEndpoint string, initArgs []string) error {
 	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
 	resMgmtClient, err := resmgmt.New(clientContext)
 	if err != nil {
 		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
 	}
-
+	ccPolicy, err := policydsl.FromString(policy)
+	if err != nil {
+		return errors.Wrap(err, "unmarshal policy string failed")
+	}
 	response, err := resMgmtClient.InstantiateCC(
 		channelId,
-		resmgmt.InstantiateCCRequest{Name: ccId, Path: ccPath, Version: ccVersion, Args: func(args []string) [][]byte {
-			var argBytes [][]byte
-			for _, arg := range args {
-				argBytes = append(argBytes, []byte(arg))
-			}
-			return argBytes
-			// todo policy
-		}(initArgs), Policy: nil},
+		resmgmt.InstantiateCCRequest{Name: ccId, Path: ccPath, Version: ccVersion, Args: parseCCArgs(initArgs), Policy: ccPolicy},
 		resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+		resmgmt.WithTargetEndpoints(peerEndpoint),
 	)
 	if err != nil {
 		return errors.Wrap(err, "instantiate chaincode failed")
@@ -131,10 +133,39 @@ func (driver *FabricSDKDriver) InstantiateCC(ccId, ccPath, ccVersion, channelId,
 	return nil
 }
 
-func (driver *FabricSDKDriver) UpdateCC() error {
+func (driver *FabricSDKDriver) UpdateCC(ccId, ccPath, ccVersion, channelId, orgId, policy string, initArgs []string) error {
+	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
+	resMgmtClient, err := resmgmt.New(clientContext)
+	if err != nil {
+		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
+	}
+	ccPolicy, err := policydsl.FromString(policy)
+	if err != nil {
+		return errors.Wrap(err, "unmarshal policy string failed")
+	}
+	req := resmgmt.UpgradeCCRequest{
+		Name:    ccId,
+		Path:    ccPath,
+		Version: ccVersion,
+		Args:    parseCCArgs(initArgs),
+		Policy:  ccPolicy,
+	}
+	resp, err := resMgmtClient.UpgradeCC(channelId, req, resmgmt.WithRetry(retry.DefaultResMgmtOpts))
+	if err != nil {
+		return errors.Wrapf(err, "upgrade chaincode %s failed, err=%s", ccId, err)
+	}
+	logger.Infof("upgrade chaincode %s success, txid=%s", ccId, resp.TransactionID)
 	return nil
 }
 
 func (driver *FabricSDKDriver) Close() {
 	driver.fabSDK.Close()
+}
+
+func parseCCArgs(args []string) [][]byte {
+	var argBytes [][]byte
+	for _, arg := range args {
+		argBytes = append(argBytes, []byte(arg))
+	}
+	return argBytes
 }
