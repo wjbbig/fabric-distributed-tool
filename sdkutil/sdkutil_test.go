@@ -13,7 +13,8 @@ func TestFabricSDKDriver_CreateChannel(t *testing.T) {
 	require.NoError(t, err)
 	defer sdk.Close()
 
-	err = sdk.CreateChannel("mychannel", "testpeerorg1", "/opt/fdt", "orderer.testordererorg")
+	err = sdk.CreateChannel("mychannel", "testpeerorg1",
+		"/opt/fdt", "orderer.testordererorg", "peer.testpeerorg1")
 	require.NoError(t, err)
 }
 

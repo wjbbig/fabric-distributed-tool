@@ -37,17 +37,17 @@ func NewFabricSDKDriver(connProfilePath string) (*FabricSDKDriver, error) {
 }
 
 // CreateChannel creates a channel with specified channelId
-func (driver *FabricSDKDriver) CreateChannel(channelId string, orgId string, fileDir string, ordererEndpoint string) error {
+func (driver *FabricSDKDriver) CreateChannel(channelId string, orgId string, fileDir string, ordererEndpoint string, peerEndpoint string) error {
 	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
 	resMgmtClient, err := resmgmt.New(clientContext)
 	if err != nil {
 		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
 	}
 
-	return createChannel(driver.fabSDK, resMgmtClient, channelId, orgId, fileDir, ordererEndpoint)
+	return createChannel(driver.fabSDK, resMgmtClient, channelId, orgId, fileDir, ordererEndpoint, peerEndpoint)
 }
 
-func createChannel(sdk *fabsdk.FabricSDK, resMgmtClient *resmgmt.Client, channelId, orgId, fileDir, ordererEndpoint string) error {
+func createChannel(sdk *fabsdk.FabricSDK, resMgmtClient *resmgmt.Client, channelId, orgId, fileDir, ordererEndpoint, peerEndpoint string) error {
 	mspClient, err := mspclient.New(sdk.Context(), mspclient.WithOrg(orgId))
 	if err != nil {
 		return err
@@ -62,7 +62,8 @@ func createChannel(sdk *fabsdk.FabricSDK, resMgmtClient *resmgmt.Client, channel
 		SigningIdentities: []msp.SigningIdentity{adminIdentity},
 	}
 	resp, err := resMgmtClient.SaveChannel(createChannelReq, resmgmt.WithRetry(retry.DefaultResMgmtOpts),
-		resmgmt.WithOrdererEndpoint(ordererEndpoint))
+		resmgmt.WithOrdererEndpoint(ordererEndpoint),
+		resmgmt.WithTargetEndpoints(peerEndpoint))
 	if err != nil {
 		return err
 	}
