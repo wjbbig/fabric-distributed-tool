@@ -231,3 +231,14 @@ func StartupNetwork(sshUtil *sshutil.SSHUtil, dataDir string) error {
 	}
 	return nil
 }
+
+func ShutdownNetwork(sshUtil *sshutil.SSHUtil, dataDir string) error {
+	for name, client := range sshUtil.Clients() {
+		dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
+		// shutdown nodes
+		if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s down -v", dockerComposeFilePath)); err != nil {
+			logger.Info(err.Error())
+		}
+	}
+	return nil
+}
