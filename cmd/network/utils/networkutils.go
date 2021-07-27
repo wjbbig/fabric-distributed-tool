@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"github.com/wjbbig/fabric-distributed-tool/sdkutil"
 	"path/filepath"
 	"strings"
 
@@ -240,5 +241,84 @@ func ShutdownNetwork(sshUtil *sshutil.SSHUtil, dataDir string) error {
 			logger.Info(err.Error())
 		}
 	}
+	return nil
+}
+
+func CreateChannel(sshUtil *sshutil.SSHUtil, dataDir string, channelId string, sdk *sdkutil.FabricSDKDriver) error {
+	var peerEndpoint, orgId, ordererEndpoint string
+	// TODO a better way to find peer and orderer
+	// find a random orderer
+	for name, client := range sshUtil.Clients() {
+		if client.GetNodeType() == "orderer" {
+			ordererEndpoint = name
+			break
+		}
+	}
+	// find a random peer
+	for name, client := range sshUtil.Clients() {
+		if client.GetNodeType() == "peer" {
+			_, orgId, _ = utils.SplitNameOrgDomain(name)
+			peerEndpoint = name
+			break
+		}
+	}
+
+	if err := sdk.CreateChannel(channelId, orgId, dataDir, ordererEndpoint, peerEndpoint); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func JoinChannel(sshUtil *sshutil.SSHUtil, channelId string, sdk *sdkutil.FabricSDKDriver) error {
+	var ordererEndpoint string
+	// find an orderer
+	for name, client := range sshUtil.Clients() {
+		if client.GetNodeType() == "orderer" {
+			ordererEndpoint = name
+			break
+		}
+	}
+	// every peer should join the channel
+	for name, client := range sshUtil.Clients() {
+		if client.GetNodeType() == "peer" {
+			_, orgId, _ := utils.SplitNameOrgDomain(name)
+			if err := sdk.JoinChannel(channelId, orgId, ordererEndpoint, name); err != nil {
+				return err
+			}
+		}
+		continue
+	}
+	return nil
+}
+
+func InstallCC(sshUtil *sshutil.SSHUtil, ccId, ccPath, ccVersion, channelId string, sdk *sdkutil.FabricSDKDriver) error {
+	for name, client := range sshUtil.Clients() {
+		if client.GetNodeType() == "peer" {
+			_, orgId, _ := utils.SplitNameOrgDomain(name)
+			if err := sdk.InstallCC(ccId, ccPath, ccVersion, channelId, orgId, name); err != nil {
+				return err
+			}
+		}
+		continue
+	}
+
+	return nil
+}
+
+func InstantiateCC(sshUtil *sshutil.SSHUtil, ccId, ccPath, ccVersion, channelId,
+	policy, initArgsStr string, sdk *sdkutil.FabricSDKDriver) error {
+	initArgs := strings.Split(initArgsStr, ",")
+	// pick a random peer to instantiate chaincode
+	for name, client := range sshUtil.Clients() {
+		if client.GetNodeType() == "peer" {
+			_, orgId, _ := utils.SplitNameOrgDomain(name)
+			if err := sdk.InstantiateCC(ccId, ccPath, ccVersion, channelId, orgId, policy, name, initArgs); err != nil {
+				return err
+			}
+		}
+		break
+	}
+
 	return nil
 }
