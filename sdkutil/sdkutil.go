@@ -18,9 +18,7 @@ import (
 
 var logger = mylogger.NewLogger()
 
-// 与fabric-sdk-go相关的方法
-
-// TODO 安装链码，实例化链码，更新链码
+// utils of fabric-sdk-go
 
 const defaultUsername = "Admin"
 
