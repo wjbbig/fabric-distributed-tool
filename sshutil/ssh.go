@@ -89,10 +89,7 @@ func (cli *SSHClient) RunCmd(cmd string) error {
 		command.Stdout = os.Stdout
 		command.Stderr = &buffer
 		if err := command.Run(); err != nil {
-			return err
-		}
-		if buffer.Len() != 0 {
-			return errors.Errorf("run command failed, address=%s, err=%s", cli.address, buffer.String())
+			return errors.New(buffer.String())
 		}
 	} else {
 		session, err := cli.client.NewSession()
@@ -103,10 +100,7 @@ func (cli *SSHClient) RunCmd(cmd string) error {
 		session.Stdout = os.Stdout
 		session.Stderr = &buffer
 		if err = session.Run(cmd); err != nil {
-			return err
-		}
-		if buffer.Len() != 0 {
-			return errors.Errorf("run command failed, address=%s, err=%s", cli.address, buffer.String())
+			return errors.New(buffer.String())
 		}
 	}
 	return nil
