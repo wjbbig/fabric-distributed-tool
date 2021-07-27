@@ -272,9 +272,6 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 			SSLTargetOverrideUrlSubstitutionExp: args[0],
 			MappedHost:                          args[0],
 		}
-		if args[2] == "localhost" || args[2] == "127.0.0.1" {
-			em.UrlSubstitutionExp = fmt.Sprintf("%s:%s", args[0], args[1])
-		}
 		entityMatchers["peer"] = append(entityMatchers["peer"], em)
 	}
 	connProfile.Peers = peers
@@ -312,14 +309,10 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 		}
 
 		em := EntityMatcher{
-			Pattern: args[0],
-			//todo use ip address instead of hostname
+			Pattern:                             args[0],
 			UrlSubstitutionExp:                  fmt.Sprintf("%s:%s", args[2], args[1]),
 			SSLTargetOverrideUrlSubstitutionExp: args[0],
 			MappedHost:                          args[0],
-		}
-		if args[2] == "localhost" || args[2] == "127.0.0.1" {
-			em.UrlSubstitutionExp = fmt.Sprintf("%s:%s", args[0], args[1])
 		}
 		entityMatchers["orderer"] = append(entityMatchers["orderer"], em)
 	}
