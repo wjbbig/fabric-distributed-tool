@@ -36,7 +36,7 @@ type Service struct {
 	Command       string   `yaml:"command,omitempty"`
 	Volumes       []string `yaml:"volumes,omitempty"`
 	Ports         []string `yaml:"ports,omitempty"`
-	dependsOn     []string `yaml:"depends_on,omitempty"`
+	DependsOn     []string `yaml:"depends_on,omitempty"`
 	Networks      []string `yaml:"networks,omitempty"`
 	ExtraHosts    []string `yaml:"extra_hosts,omitempty"`
 }
@@ -219,5 +219,54 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 
 // generateCLI 生成cli容器的docker-compose.yaml文件,2.x版本默认不再提供cli容器
 func generateCLI(filePath string) error {
+	return nil
+}
+
+func GenerateCA(filePath string, orgId string, domain string, port string) error {
+	var dockerCompose DockerCompose
+	dockerCompose.Version = "2"
+	imageName, err := detectImageNameAndTag("fabric-ca")
+	if err != nil {
+		return err
+	}
+	caService := Service{
+		ContainerName: fmt.Sprintf("ca_%s", orgId),
+		Image:         imageName,
+		Environment: []string{
+			"FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server",
+			fmt.Sprintf("FABRIC_CA_SERVER_CA_NAME=ca-%s", orgId),
+			"FABRIC_CA_SERVER_TLS_ENABLED=true",
+			fmt.Sprintf("FABRIC_CA_SERVER_TLS_CERTFILE=/etc/hyperledger/fabric-ca-server-config/ca.%s-cert.pem", domain),
+			"FABRIC_CA_SERVER_TLS_KEYFILE=/etc/hyperledger/fabric-ca-server-config/priv_sk",
+			fmt.Sprintf("FABRIC_CA_SERVER_PORT=%s", port),
+		},
+		Command: `sh -c 'fabric-ca-server start --ca.certfile /etc/hyperledger/fabric-ca-server-config/ca.org1.example.com-cert.pem --ca.keyfile /etc/hyperledger/fabric-ca-server-config/priv_sk -b admin:adminpw -d'`,
+		Volumes: []string{
+			fmt.Sprintf("%s/crypto-config/peerOrganizations/%s/ca/:/etc/hyperledger/fabric-ca-server-config",
+				filePath, domain),
+		},
+		Ports:    []string{fmt.Sprintf("%[1]s:%[1]s", port)},
+		Networks: []string{defaultNetworkName},
+	}
+	dockerCompose.Services = map[string]Service{
+		fmt.Sprintf("ca_%s", orgId): caService,
+	}
+	dockerCompose.Networks = map[string]ExternalNetwork{
+		defaultNetworkName: {},
+	}
+	caFileName := fmt.Sprintf("%s%s-ca.yaml", defaultDockerComposeFile, domain)
+	filePath = filepath.Join(filePath, caFileName)
+	data, err := yaml.Marshal(dockerCompose)
+	if err != nil {
+		return errors.Wrapf(err, "failed to generate docker-compose file for %s ca", orgId)
+	}
+	if err := ioutil.WriteFile(filePath, data, 0755); err != nil {
+		return errors.Wrap(err, "failed to write file")
+	}
+	logger.Infof("finish generating peer docker_compose_ca file, org=%s", orgId)
+	return nil
+}
+
+func GenerateCouchDB(filepath string) error {
 	return nil
 }

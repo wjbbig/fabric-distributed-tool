@@ -88,6 +88,7 @@ var startupCmd = &cobra.Command{
 		if err := utils.InstantiateCC(sshUtil, chaincodeId, chaincodePath, chaincodeVersion, channelId,
 			policy, initParam, sdk); err != nil {
 			logger.Error(err.Error())
+			return nil
 		}
 		logger.Info("DONE!")
 		return nil

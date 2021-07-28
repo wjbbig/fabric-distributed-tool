@@ -12,7 +12,6 @@ import (
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/common/policydsl"
 	"github.com/pkg/errors"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
-	"os"
 	"path/filepath"
 )
 
@@ -93,8 +92,7 @@ func (driver *FabricSDKDriver) InstallCC(ccId, ccPath, ccVersion, channelId, org
 	if err != nil {
 		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
 	}
-	gopath := os.Getenv("GOPATH")
-	ccPkg, err := gopackager.NewCCPackage(ccPath, gopath)
+	ccPkg, err := gopackager.NewCCPackage(ccPath, "")
 	if err != nil {
 		return errors.Wrapf(err, "package chaincode failed")
 	}

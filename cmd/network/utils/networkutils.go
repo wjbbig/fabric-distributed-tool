@@ -213,8 +213,6 @@ func TransferFilesByPeerName(sshUtil *sshutil.SSHUtil, dataDir string) error {
 		if err = client.Sftp(dockerComposeFilePath, dataDir); err != nil {
 			return err
 		}
-
-		// TODO transfer chaincode files
 	}
 	return nil
 }
