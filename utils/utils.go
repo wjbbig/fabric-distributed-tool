@@ -3,10 +3,12 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // SplitNameOrgDomain 将url拆分成节点名称,组织名称和域名
@@ -75,4 +77,10 @@ func CheckLocalIp(ip string) (bool, error) {
 		return true, nil
 	}
 	return false, nil
+}
+
+func GetRandomPort() int {
+	// 7000~60000
+	rand.Seed(time.Now().UnixNano())
+	return rand.Intn(53000) + 7000
 }
