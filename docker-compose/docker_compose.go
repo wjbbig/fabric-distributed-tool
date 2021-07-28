@@ -197,7 +197,7 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 	dockerCompose.Networks = map[string]ExternalNetwork{
 		defaultNetworkName: {},
 	}
-	// 先创建文件夹
+	// create the directory first
 	_, err = os.Stat(filePath)
 	if err != nil {
 		if err = os.MkdirAll(filePath, 0755); err != nil {
@@ -217,7 +217,11 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 	return nil
 }
 
-// generateCLI 生成cli容器的docker-compose.yaml文件,2.x版本默认不再提供cli容器
+// generateCLI generates the docker compose file for cli container.
+// if the fabric version is 2.x, this will not be generated.
+// if the endpoint has only one orderer node, this file will not be generated too, thus orderer does not need it.
+// if the endpoint has two or more peer nodes, then only generates one cli file, cause you can connect to other peers
+// by changing env params
 func generateCLI(filePath string) error {
 	return nil
 }
