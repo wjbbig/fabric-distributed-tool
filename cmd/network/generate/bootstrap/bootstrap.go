@@ -17,6 +17,7 @@ var (
 	fabricVersion string
 	channelId     string
 	consensus     string
+	ifCouchdb     bool
 )
 
 // peer0.org1.example.com:7050@username@127.0.0.1:22:password
@@ -34,7 +35,8 @@ func resetFlags() {
 	flags.StringArrayVarP(&ordererUrls, "ordererurls", "o", nil, "Urls of fabric orderers")
 	flags.StringVarP(&fabricVersion, "version", "v", "1.4", "Version of fabric, value can be 1.4 or 2.0")
 	flags.StringVarP(&channelId, "channelid", "c", "", "Fabric channel name")
-	flags.StringVarP(&consensus, "consensus", "s", "", "Orderer consensus type of fabric network")
+	flags.StringVarP(&consensus, "consensus", "C", "", "Orderer consensus type of fabric network")
+	flags.BoolVar(&ifCouchdb, "couchdb", false, "If use couchdb")
 }
 
 var bootstrapCmd = &cobra.Command{
@@ -60,7 +62,7 @@ var bootstrapCmd = &cobra.Command{
 			logger.Error(err.Error())
 			return nil
 		}
-		if err := utils.GenerateDockerCompose(dataDir, peerUrls, ordererUrls); err != nil {
+		if err := utils.GenerateDockerCompose(dataDir, peerUrls, ordererUrls, ifCouchdb); err != nil {
 			logger.Error(err.Error())
 			return nil
 		}

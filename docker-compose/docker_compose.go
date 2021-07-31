@@ -145,7 +145,7 @@ func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherU
 }
 
 // GeneratePeerDockerComposeFile 生产peer的docker-compose启动文件
-func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootstrapPeerUrl string, otherUrls []string) error {
+func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootstrapPeerUrl string, otherUrls []string, couchdb bool) error {
 	var dockerCompose DockerCompose
 	imageName, err := detectImageNameAndTag("fabric-peer")
 	if err != nil {
@@ -190,9 +190,6 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 		Networks:   []string{defaultNetworkName},
 		ExtraHosts: otherUrls,
 	}
-	dockerCompose.Services = map[string]Service{
-		peerUrlArgs[0]: peerService,
-	}
 	dockerCompose.Version = `2`
 	dockerCompose.Networks = map[string]ExternalNetwork{
 		defaultNetworkName: {},
@@ -203,6 +200,20 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 		if err = os.MkdirAll(filePath, 0755); err != nil {
 			return err
 		}
+	}
+	// generate docker compose file if using couchdb
+	if couchdb {
+		couchdbServiceName, err := GenerateCouchDB(filePath, peerUrlArgs[0])
+		if err != nil {
+			return err
+		}
+		peerService.Environment = append(peerService.Environment, "CORE_LEDGER_STATE_STATEDATABASE=CouchDB")
+		peerService.Environment = append(peerService.Environment, fmt.Sprintf("CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=%s", couchdbServiceName))
+		peerService.Environment = append(peerService.Environment, "CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=")
+		peerService.Environment = append(peerService.Environment, "CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=")
+	}
+	dockerCompose.Services = map[string]Service{
+		peerUrlArgs[0]: peerService,
 	}
 	filePath = filepath.Join(filePath, fmt.Sprintf("%s%s.yaml", defaultDockerComposeFile,
 		strings.ReplaceAll(peerUrlArgs[0], ".", "-")))
@@ -217,12 +228,12 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 	return nil
 }
 
-// generateCLI generates the docker compose file for cli container.
+// GenerateCLI generates the docker compose file for cli container.
 // if the fabric version is 2.x, this will not be generated.
 // if the endpoint has only one orderer node, this file will not be generated too, thus orderer does not need it.
 // if the endpoint has two or more peer nodes, then only generates one cli file, cause you can connect to other peers
 // by changing env params
-func generateCLI(filePath string) error {
+func GenerateCLI(filePath string) error {
 	return nil
 }
 
@@ -271,6 +282,37 @@ func GenerateCA(filePath string, orgId string, domain string, port string) error
 	return nil
 }
 
-func GenerateCouchDB(filepath string) error {
-	return nil
+func GenerateCouchDB(filePath string, peerUrl string) (string, error) {
+	logger.Infof("begin to generate couchdb docker compose file for %", peerUrl)
+	var dockerCompose DockerCompose
+	dockerCompose.Version = "2"
+	dockerCompose.Networks = map[string]ExternalNetwork{
+		defaultNetworkName: {},
+	}
+	name, org, _ := utils.SplitNameOrgDomain(peerUrl)
+	serviceName := fmt.Sprintf("couchdb_%s_%s", name, org)
+	port := utils.GetRandomPort()
+	couchDBService := Service{
+		ContainerName: serviceName,
+		Image:         "hyperledger/fabric-couchdb",
+		Environment: []string{
+			"COUCHDB_USER=",
+			"COUCHDB_PASSWORD=",
+		},
+		Ports:    []string{fmt.Sprintf("%d:%d", port, 5984)},
+		Networks: []string{defaultNetworkName},
+	}
+	dockerCompose.Services = map[string]Service{
+		serviceName: couchDBService,
+	}
+
+	filePath = filepath.Join(filePath, fmt.Sprintf("%s%s.yaml", defaultDockerComposeFile, strings.ReplaceAll(peerUrl, ".", "-")))
+	data, err := yaml.Marshal(dockerCompose)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to yaml marshal couchdb docker compose file")
+	}
+	if err = ioutil.WriteFile(filePath, data, 0755); err != nil {
+		return "", errors.Wrap(err, "failed to write file")
+	}
+	return serviceName, nil
 }

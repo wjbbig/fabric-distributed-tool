@@ -85,7 +85,7 @@ func GenerateConfigtx(dataDir, consensus, channelId string, peerUrls, ordererUrl
 	return nil
 }
 
-func GenerateDockerCompose(dataDir string, peerUrls, ordererUrls []string) error {
+func GenerateDockerCompose(dataDir string, peerUrls, ordererUrls []string, couchdb bool) error {
 	var peers []string
 	var orderers []string
 	peersByOrg := make(map[string][]string)
@@ -123,7 +123,7 @@ func GenerateDockerCompose(dataDir string, peerUrls, ordererUrls []string) error
 		var extraHosts []string
 		extraHosts = append(extraHosts, spliceHostnameAndIP(peer, peerUrls)...)
 		extraHosts = append(extraHosts, spliceHostnameAndIP(peer, ordererUrls)...)
-		if err := docker_compose.GeneratePeerDockerComposeFile(dataDir, peer, gossipUrl, extraHosts); err != nil {
+		if err := docker_compose.GeneratePeerDockerComposeFile(dataDir, peer, gossipUrl, extraHosts, couchdb); err != nil {
 			return err
 		}
 	}
