@@ -187,7 +187,7 @@ func ReadSSHConfig(dataDir string) (*sshutil.SSHUtil, error) {
 	return sshUtil, nil
 }
 
-func TransferFilesByPeerName(sshUtil *sshutil.SSHUtil, dataDir string) error {
+func TransferFilesByPeerName(sshUtil *sshutil.SSHUtil, dataDir string, couchdb bool) error {
 	ordererCryptoConfigPrefix := filepath.Join(dataDir, "crypto-config", "ordererOrganizations")
 	peerCryptoConfigPrefix := filepath.Join(dataDir, "crypto-config", "peerOrganizations")
 	for name, client := range sshUtil.Clients() {
@@ -213,20 +213,32 @@ func TransferFilesByPeerName(sshUtil *sshutil.SSHUtil, dataDir string) error {
 		if err = client.Sftp(dockerComposeFilePath, dataDir); err != nil {
 			return err
 		}
+		if couchdb {
+			dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-couchdb.yaml", strings.ReplaceAll(name, ".", "-")))
+			if err = client.Sftp(dockerComposeFilePath, dataDir); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
 
-func StartupNetwork(sshUtil *sshutil.SSHUtil, dataDir string) error {
+func StartupNetwork(sshUtil *sshutil.SSHUtil, dataDir string, couchdb bool) error {
 	for name, client := range sshUtil.Clients() {
-		dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
-		// start nodes
+		var dockerComposeFilePath string
+		if couchdb && client.GetNodeType() == "peer" {
+			// start couchdb first
+			dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-couchdb.yaml", strings.ReplaceAll(name, ".", "-")))
+			if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s up -d", dockerComposeFilePath)); err != nil {
+				logger.Info(err.Error())
+			}
+		}
+		dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
+		// start node
 		if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s up -d", dockerComposeFilePath)); err != nil {
 			logger.Info(err.Error())
 		}
 		// TODO start ca if chosen
-
-		// TODO start couchdb if chosen
 	}
 	return nil
 }

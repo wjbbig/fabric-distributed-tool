@@ -246,7 +246,7 @@ func GenerateCouchDB(filePath string, peerUrl string) (string, error) {
 		defaultNetworkName: {},
 	}
 	name, org, _ := utils.SplitNameOrgDomain(peerUrl)
-	serviceName := fmt.Sprintf("couchdb_%s_%s", name, org)
+	serviceName := fmt.Sprintf("couchdb.%s.%s", name, org)
 	port := utils.GetRandomPort()
 	couchDBService := Service{
 		ContainerName: serviceName,

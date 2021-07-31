@@ -15,7 +15,7 @@ var logger = mylogger.NewLogger()
 var (
 	dataDir          string
 	ca               bool
-	stateDB          string
+	couchdb          bool
 	channelId        string
 	chaincodeId      string
 	chaincodePath    string
@@ -49,11 +49,11 @@ var startupCmd = &cobra.Command{
 		}
 		defer sshUtil.CloseAll()
 
-		if err := utils.TransferFilesByPeerName(sshUtil, dataDir); err != nil {
+		if err := utils.TransferFilesByPeerName(sshUtil, dataDir, couchdb); err != nil {
 			logger.Error(err.Error())
 			return nil
 		}
-		if err := utils.StartupNetwork(sshUtil, dataDir); err != nil {
+		if err := utils.StartupNetwork(sshUtil, dataDir, couchdb); err != nil {
 			logger.Error(err.Error())
 			return nil
 		}
@@ -104,14 +104,14 @@ var flags *pflag.FlagSet
 
 func resetFlags() {
 	flags = &pflag.FlagSet{}
-	flags.StringVar(&dataDir, "datadir", "", "Path to file containing fabric needed")
+	flags.StringVarP(&dataDir, "datadir", "d", "", "Path to file containing fabric needed")
 	flags.BoolVar(&ca, "ca", false, "If start the fabric ca container")
-	flags.StringVar(&stateDB, "statedb", "leveldb", "Which type of statedb that fabric uses")
+	flags.BoolVar(&couchdb, "couchdb", false, "If use couchdb")
 	flags.BoolVar(&startOnly, "startonly", false, "Just start the docker container")
-	flags.StringVar(&channelId, "channel", "", "Channel Name")
-	flags.StringVar(&chaincodeId, "ccid", "", "Chaincode Name")
-	flags.StringVar(&chaincodePath, "ccpath", "", "Chaincode path")
-	flags.StringVar(&chaincodeVersion, "ccver", "", "Chaincode version")
+	flags.StringVarP(&channelId, "channelid", "c", "", "Channel Name")
+	flags.StringVarP(&chaincodeId, "ccid", "n", "", "Chaincode Name")
+	flags.StringVarP(&chaincodePath, "ccpath", "p", "", "Chaincode path")
+	flags.StringVarP(&chaincodeVersion, "ccver", "v", "", "Chaincode version")
 	flags.StringVar(&policy, "policy", "", "Chaincode policy")
-	flags.StringVar(&initParam, "initparam", "", "Chaincode Init params")
+	flags.StringVar(&initParam, "params", "init", "Chaincode Init params")
 }
