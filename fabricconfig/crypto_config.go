@@ -105,7 +105,7 @@ func GenerateCryptoConfigFile(filePath string, peers, orderers []string) error {
 	if err != nil {
 		return err
 	}
-	defer logger.Info("finish generating crypto-config.yaml")
+	logger.Info("finish generating crypto-config.yaml")
 	return ioutil.WriteFile(path, data, 0755)
 }
 
