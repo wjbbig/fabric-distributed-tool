@@ -239,7 +239,7 @@ func GenerateCA(filePath string, orgId string, domain string, port string) error
 }
 
 func GenerateCouchDB(filePath string, peerUrl string) (string, error) {
-	logger.Infof("begin to generate couchdb docker compose file for %", peerUrl)
+	logger.Infof("begin to generate couchdb docker compose file for %s", peerUrl)
 	var dockerCompose DockerCompose
 	dockerCompose.Version = "2"
 	dockerCompose.Networks = map[string]ExternalNetwork{
@@ -262,7 +262,7 @@ func GenerateCouchDB(filePath string, peerUrl string) (string, error) {
 		serviceName: couchDBService,
 	}
 
-	filePath = filepath.Join(filePath, fmt.Sprintf("%s%s.yaml", defaultDockerComposeFile, strings.ReplaceAll(peerUrl, ".", "-")))
+	filePath = filepath.Join(filePath, fmt.Sprintf("%s%s-couchdb.yaml", defaultDockerComposeFile, strings.ReplaceAll(peerUrl, ".", "-")))
 	data, err := yaml.Marshal(dockerCompose)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to yaml marshal couchdb docker compose file")
@@ -270,5 +270,6 @@ func GenerateCouchDB(filePath string, peerUrl string) (string, error) {
 	if err = ioutil.WriteFile(filePath, data, 0755); err != nil {
 		return "", errors.Wrap(err, "failed to write file")
 	}
-	return serviceName, nil
+	logger.Infof("finish generating couchdb docker_compose file for %s", peerUrl)
+	return fmt.Sprintf("%s:%d", serviceName, port), nil
 }
