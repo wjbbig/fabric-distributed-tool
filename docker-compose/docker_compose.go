@@ -1,11 +1,7 @@
 package docker_compose
 
 import (
-	"context"
 	"fmt"
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/client"
 	"github.com/pkg/errors"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
 	"github.com/wjbbig/fabric-distributed-tool/utils"
@@ -45,48 +41,16 @@ type ExternalNetwork struct {
 	External bool `yaml:"external,omitempty"`
 }
 
-// detectImageNameAndTag 找到包含某个关键字的docker image的tag
-func detectImageNameAndTag(keyword string) (string, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv)
-	if err != nil {
-		return "", errors.Wrapf(err, "detect image of %s failed", keyword)
-	}
-	defer cli.Close()
-	options := types.ImageListOptions{
-		All:     false,
-		Filters: filters.Args{},
-	}
-	imageList, err := cli.ImageList(context.Background(), options)
-	if err != nil {
-		return "", errors.Wrapf(err, "detect image of %s failed", keyword)
-	}
-
-	for _, summary := range imageList {
-		if summary.RepoTags == nil {
-			continue
-		}
-		if strings.Contains(summary.RepoTags[0], keyword) {
-			return summary.RepoTags[0], nil
-		}
-	}
-
-	return "", errors.Errorf("there is no docker image containing keyword %s", keyword)
-}
-
 // GenerateOrdererDockerComposeFile 生成启动orderer的docker-compose文件
 func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherUrls []string) error {
 	var dockerCompose DockerCompose
 	ordererURLArgs := strings.Split(ordererUrl, ":")
 	logger.Infof("begin to generate docker_compose file, url=%s", ordererURLArgs[0])
-	imageName, err := detectImageNameAndTag("fabric-orderer")
-	if err != nil {
-		return err
-	}
 
 	_, orgName, domain := utils.SplitNameOrgDomain(ordererURLArgs[0])
 	ordererService := Service{
 		ContainerName: ordererURLArgs[0],
-		Image:         imageName,
+		Image:         "hyperledger/fabric-orderer",
 		Environment: []string{
 			"FABRIC_LOGGING_SPEC=INFO",
 			"ORDERER_GENERAL_LISTENADDRESS=0.0.0.0",
@@ -125,7 +89,7 @@ func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherU
 	dockerCompose.Networks = map[string]ExternalNetwork{
 		defaultNetworkName: {},
 	}
-	_, err = os.Stat(filePath)
+	_, err := os.Stat(filePath)
 	if err != nil {
 		if err = os.MkdirAll(filePath, 0755); err != nil {
 			return err
@@ -147,17 +111,13 @@ func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherU
 // GeneratePeerDockerComposeFile 生产peer的docker-compose启动文件
 func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootstrapPeerUrl string, otherUrls []string, couchdb bool) error {
 	var dockerCompose DockerCompose
-	imageName, err := detectImageNameAndTag("fabric-peer")
-	if err != nil {
-		return err
-	}
 	peerUrlArgs := strings.Split(peerUrl, ":")
 	logger.Infof("begin to generate peer docker_compose file, url=%s", peerUrlArgs[0])
 	_, orgName, domain := utils.SplitNameOrgDomain(peerUrlArgs[0])
 	networkPrefix := path.Base(filePath)
 	peerService := Service{
 		ContainerName: peerUrlArgs[0],
-		Image:         imageName,
+		Image:         "hyperledger/fabric-peer",
 		WorkingDir:    "/opt/gopath/src/github.com/hyperledger/fabric/peer",
 		Environment: []string{
 			"CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock",
@@ -195,7 +155,7 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 		defaultNetworkName: {},
 	}
 	// create the directory first
-	_, err = os.Stat(filePath)
+	_, err := os.Stat(filePath)
 	if err != nil {
 		if err = os.MkdirAll(filePath, 0755); err != nil {
 			return err
@@ -240,13 +200,9 @@ func GenerateCLI(filePath string) error {
 func GenerateCA(filePath string, orgId string, domain string, port string) error {
 	var dockerCompose DockerCompose
 	dockerCompose.Version = "2"
-	imageName, err := detectImageNameAndTag("fabric-ca")
-	if err != nil {
-		return err
-	}
 	caService := Service{
 		ContainerName: fmt.Sprintf("ca_%s", orgId),
-		Image:         imageName,
+		Image:         "hyperledger/fabric-ca",
 		Environment: []string{
 			"FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server",
 			fmt.Sprintf("FABRIC_CA_SERVER_CA_NAME=ca-%s", orgId),
