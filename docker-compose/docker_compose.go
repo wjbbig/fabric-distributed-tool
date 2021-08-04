@@ -163,18 +163,14 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 	}
 	// generate docker compose file if using couchdb
 	if couchdb {
-		couchdbServiceName, port, err := GenerateCouchDB(filePath, peerUrlArgs[0])
+		couchdbServiceName, err := GenerateCouchDB(filePath, peerUrlArgs[0])
 		if err != nil {
 			return err
 		}
 		peerService.Environment = append(peerService.Environment, "CORE_LEDGER_STATE_STATEDATABASE=CouchDB")
-		peerService.Environment = append(peerService.Environment, fmt.Sprintf("CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=%s:%d", couchdbServiceName, port))
+		peerService.Environment = append(peerService.Environment, fmt.Sprintf("CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=%s:5984", couchdbServiceName))
 		peerService.Environment = append(peerService.Environment, "CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=")
 		peerService.Environment = append(peerService.Environment, "CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=")
-
-		peerService.DependsOn = []string{
-			couchdbServiceName,
-		}
 	}
 	dockerCompose.Services = map[string]Service{
 		peerUrlArgs[0]: peerService,
@@ -242,7 +238,7 @@ func GenerateCA(filePath string, orgId string, domain string, port string) error
 	return nil
 }
 
-func GenerateCouchDB(filePath string, peerUrl string) (string, int, error) {
+func GenerateCouchDB(filePath string, peerUrl string) (string, error) {
 	logger.Infof("begin to generate couchdb docker compose file for %s", peerUrl)
 	var dockerCompose DockerCompose
 	dockerCompose.Version = "2"
@@ -269,11 +265,11 @@ func GenerateCouchDB(filePath string, peerUrl string) (string, int, error) {
 	filePath = filepath.Join(filePath, fmt.Sprintf("%s%s-couchdb.yaml", defaultDockerComposeFile, strings.ReplaceAll(peerUrl, ".", "-")))
 	data, err := yaml.Marshal(dockerCompose)
 	if err != nil {
-		return "", -1, errors.Wrap(err, "failed to yaml marshal couchdb docker compose file")
+		return "", errors.Wrap(err, "failed to yaml marshal couchdb docker compose file")
 	}
 	if err = ioutil.WriteFile(filePath, data, 0755); err != nil {
-		return "", -1, errors.Wrap(err, "failed to write file")
+		return "", errors.Wrap(err, "failed to write file")
 	}
 	logger.Infof("finish generating couchdb docker_compose file for %s", peerUrl)
-	return serviceName, port, nil
+	return serviceName, nil
 }
