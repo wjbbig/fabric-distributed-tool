@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	log "github.com/wjbbig/fabric-distributed-tool/logger"
+	"github.com/wjbbig/fabric-distributed-tool/tools/cryptogen/ca"
+	"github.com/wjbbig/fabric-distributed-tool/tools/cryptogen/msp"
 	"github.com/wjbbig/fabric-distributed-tool/utils"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -15,35 +17,38 @@ const defaultCryptoConfigFileName = "crypto-config.yaml"
 var logger = log.NewLogger()
 
 type CryptoConfig struct {
-	OrdererOrgs []cryptoOrdererConfig `yaml:"OrdererOrgs,omitempty"`
-	PeerOrgs    []cryptoPeerConfig    `yaml:"PeerOrgs,omitempty"`
+	OrdererOrgs []cryptoNodeConfig `yaml:"OrdererOrgs,omitempty"`
+	PeerOrgs    []cryptoNodeConfig `yaml:"PeerOrgs,omitempty"`
 }
 
-type cryptoOrdererConfig struct {
-	Name          string       `yaml:"Name,omitempty"`
-	Domain        string       `yaml:"Domain,omitempty"`
-	EnableNodeOUs bool         `yaml:"EnableNodeOUs,omitempty"`
-	Specs         []cryptoSpec `yaml:"Specs,omitempty"`
-}
-
-type cryptoPeerConfig struct {
+type cryptoNodeConfig struct {
 	Name          string         `yaml:"Name,omitempty"`
 	Domain        string         `yaml:"Domain,omitempty"`
 	EnableNodeOUs bool           `yaml:"EnableNodeOUs,omitempty"`
+	CA            cryptoSpec     `yaml:"CA,omitempty"`
 	Specs         []cryptoSpec   `yaml:"Specs,omitempty"`
 	Template      cryptoTemplate `yaml:"Template,omitempty"`
 	Users         cryptoUsers    `yaml:"Users,omitempty"`
 }
 
 type cryptoSpec struct {
-	Hostname   string `yaml:"Hostname,omitempty"`
-	CommonName string `yaml:"CommonName,omitempty"`
+	isAdmin            bool
+	Hostname           string   `yaml:"Hostname,omitempty"`
+	CommonName         string   `yaml:"CommonName,omitempty"`
+	Country            string   `yaml:"Country,omitempty"`
+	Province           string   `yaml:"Province,omitempty"`
+	Locality           string   `yaml:"Locality,omitempty"`
+	OrganizationalUnit string   `yaml:"Locality,omitempty"`
+	StreetAddress      string   `yaml:"StreetAddress,omitempty"`
+	PostalCode         string   `yaml:"PostalCode,omitempty"`
+	SANS               []string `yaml:"SANS,omitempty"`
 }
 
 type cryptoTemplate struct {
-	Count    int    `yaml:"Count,omitempty"`
-	Start    int    `yaml:"Start,omitempty"`
-	Hostname string `yaml:"Hostname,omitempty"`
+	Count    int      `yaml:"Count,omitempty"`
+	Start    int      `yaml:"Start,omitempty"`
+	Hostname string   `yaml:"Hostname,omitempty"`
+	SANS     []string `yaml:"SANS,omitempty"`
 }
 
 type cryptoUsers struct {
@@ -55,15 +60,15 @@ func GenerateCryptoConfigFile(filePath string, peers, orderers []string) error {
 	logger.Info("begin to generate crypto-config.yaml")
 	path := filepath.Join(filePath, defaultCryptoConfigFileName)
 	var cryptoConfig CryptoConfig
-	var ordererConfigs []cryptoOrdererConfig
-	var peerConfigs []cryptoPeerConfig
+	var ordererConfigs []cryptoNodeConfig
+	var peerConfigs []cryptoNodeConfig
 
-	ordererMap := make(map[string]cryptoOrdererConfig)
+	ordererMap := make(map[string]cryptoNodeConfig)
 	for _, ordererUrl := range orderers {
 		ordererName, ordererOrg, ordererDomain := utils.SplitNameOrgDomain(ordererUrl)
 		oc, ok := ordererMap[ordererDomain]
 		if !ok {
-			ordererMap[ordererDomain] = cryptoOrdererConfig{
+			ordererMap[ordererDomain] = cryptoNodeConfig{
 				Name:          ordererOrg,
 				Domain:        ordererDomain,
 				EnableNodeOUs: true,
@@ -78,12 +83,12 @@ func GenerateCryptoConfigFile(filePath string, peers, orderers []string) error {
 	for _, config := range ordererMap {
 		ordererConfigs = append(ordererConfigs, config)
 	}
-	peerMap := make(map[string]cryptoPeerConfig)
+	peerMap := make(map[string]cryptoNodeConfig)
 	for _, peerUrl := range peers {
 		peerName, peerOrg, peerDomain := utils.SplitNameOrgDomain(peerUrl)
 		pc, ok := peerMap[peerDomain]
 		if !ok {
-			peerMap[peerDomain] = cryptoPeerConfig{
+			peerMap[peerDomain] = cryptoNodeConfig{
 				Name:          peerOrg,
 				Domain:        peerDomain,
 				EnableNodeOUs: true,
@@ -112,9 +117,9 @@ func GenerateCryptoConfigFile(filePath string, peers, orderers []string) error {
 // GenerateLocallyTestNetworkCryptoConfig 生成一个本地测试网络的crypto-config.yaml文件
 func GenerateLocallyTestNetworkCryptoConfig(filePath string) error {
 	var cryptoConfig CryptoConfig
-	var ordererConfigs []cryptoOrdererConfig
-	var peerConfigs []cryptoPeerConfig
-	ordererConfigs = append(ordererConfigs, cryptoOrdererConfig{
+	var ordererConfigs []cryptoNodeConfig
+	var peerConfigs []cryptoNodeConfig
+	ordererConfigs = append(ordererConfigs, cryptoNodeConfig{
 		Name:          "Orderer",
 		Domain:        "example.com",
 		EnableNodeOUs: true,
@@ -138,14 +143,14 @@ func GenerateLocallyTestNetworkCryptoConfig(filePath string) error {
 	})
 	cryptoConfig.OrdererOrgs = ordererConfigs
 
-	peerConfigs = append(peerConfigs, cryptoPeerConfig{
+	peerConfigs = append(peerConfigs, cryptoNodeConfig{
 		Name:          "Org1",
 		Domain:        "org1.example.com",
 		EnableNodeOUs: true,
 		Template:      cryptoTemplate{Count: 2},
 		Users:         cryptoUsers{Count: 1},
 	})
-	peerConfigs = append(peerConfigs, cryptoPeerConfig{
+	peerConfigs = append(peerConfigs, cryptoNodeConfig{
 		Name:          "Org2",
 		Domain:        "org2.example.com",
 		EnableNodeOUs: true,
@@ -174,4 +179,37 @@ func GenerateKeyPairsAndCerts(fileDir string) error {
 	args = append(args, fmt.Sprintf("--output=%s/%s", fileDir, "crypto-config"))
 	cryptogenPath := filepath.Join("tools", "cryptogen")
 	return utils.RunLocalCmd(cryptogenPath, args...)
+}
+
+func renderOrgSpec(nodeConfig *cryptoNodeConfig, prefix string) error {
+	return nil
+}
+
+func generatePeerOrgKeypairsAndCerts(baseDir string, nodeConfig cryptoNodeConfig) error {
+	orgName := nodeConfig.Domain
+	// generate CAs
+	orgDir := filepath.Join(baseDir, "peerOrganizations", orgName)
+	caDir := filepath.Join(orgDir, "ca")
+	tlsCADir := filepath.Join(orgDir, "tlsca")
+	mspDir := filepath.Join(orgDir, "msp")
+	peersDir := filepath.Join(orgDir, "peers")
+	usersDir := filepath.Join(orgDir, "users")
+	adminCertsDir := filepath.Join(mspDir, "admincerts")
+
+	signCA, err := ca.NewCA(caDir, orgName, nodeConfig.CA.CommonName, nodeConfig.CA.Country, nodeConfig.CA.Province,
+		nodeConfig.CA.Locality, nodeConfig.CA.OrganizationalUnit, nodeConfig.CA.StreetAddress, nodeConfig.CA.PostalCode)
+	if err != nil {
+		return errors.Wrapf(err, "failed to generate signCA for org %s", orgName)
+	}
+	tlsCA, err := ca.NewCA(tlsCADir, orgName, "tls"+nodeConfig.CA.CommonName, nodeConfig.CA.Country, nodeConfig.CA.Province,
+		nodeConfig.CA.Locality, nodeConfig.CA.OrganizationalUnit, nodeConfig.CA.StreetAddress, nodeConfig.CA.PostalCode)
+	if err != nil {
+		return errors.Wrapf(err, "failed to genreating MSP for org %s", orgName)
+	}
+	// generate TLS CA
+	if err := msp.GenerateVerifyingMSP(mspDir, signCA, tlsCA, nodeConfig.EnableNodeOUs); err != nil {
+		return errors.Wrapf(err, "failed to generate MSP for org %s", orgName)
+	}
+
+	return nil
 }
