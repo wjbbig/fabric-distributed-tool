@@ -19,6 +19,15 @@ var logger = mylogger.NewLogger()
 
 // utils of fabric-sdk-go
 
+type SDKUtil interface {
+	CreateChannel(channelId string, orgId string, fileDir string, ordererEndpoint string, peerEndpoint string) error
+	JoinChannel(channelId string, orgId string, ordererEndpoint string, peerEndpoint string) error
+	InstallCC(ccId, ccPath, ccVersion, channelId, orgId, peerEndpoint string) error
+	InstantiateCC(ccId, ccPath, ccVersion, channelId, orgId, policy, peerEndpoint string, initArgs []string) error
+	UpdateCC(ccId, ccPath, ccVersion, channelId, orgId, policy string, initArgs []string) error
+	Close()
+}
+
 const defaultUsername = "Admin"
 
 type FabricSDKDriver struct {
