@@ -12,10 +12,7 @@ var (
 	dataDir     string
 	peerUrls    []string
 	ordererUrls []string
-	//fabricVersion string
-	//channelId     string
-	//consensus     string
-	ifCouchdb bool
+	ifCouchdb   bool
 )
 
 // peer0.org1.example.com:7050@username@127.0.0.1:22:password
@@ -28,7 +25,6 @@ func init() {
 func resetFlags() {
 	flags = &pflag.FlagSet{}
 	flags.StringVarP(&dataDir, "datadir", "d", "", "Path to file containing fabric needed")
-	// generate -p a -p b -p c
 	flags.StringArrayVarP(&peerUrls, "peerurls", "p", nil, "Urls of fabric peers")
 	flags.StringArrayVarP(&ordererUrls, "ordererurls", "o", nil, "Urls of fabric orderers")
 	flags.BoolVar(&ifCouchdb, "couchdb", false, "If use couchdb")
@@ -46,6 +42,7 @@ var extendCmd = &cobra.Command{
 		// update docker-compose
 
 		// update connectionfile
+
 		return nil
 	},
 }
