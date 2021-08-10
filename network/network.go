@@ -50,7 +50,8 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, ccId, ccPath, ccVers
 	network.Chaincodes = map[string]*Chaincode{
 		ccId: chaincode,
 	}
-
+	channels := make(map[string]*Channel)
+	channel := &Channel{}
 	nodes := make(map[string]*Node)
 	for _, url := range peerUrls {
 		node, err := NewNode(url, "peer")
@@ -58,6 +59,7 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, ccId, ccPath, ccVers
 			return err
 		}
 		nodes[node.hostname] = node
+		channel.Peers = append(channel.Peers, node.hostname)
 	}
 	for _, url := range ordererUrls {
 		node, err := NewNode(url, "orderer")
@@ -65,7 +67,12 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, ccId, ccPath, ccVers
 			return err
 		}
 		nodes[node.hostname] = node
+		channel.Orderers = append(channel.Orderers, node.hostname)
 	}
+	channel.Chaincodes = append(channel.Chaincodes, ccId)
+	channels[channelId] = channel
+	network.Channels = channels
+	network.Nodes = nodes
 	return nil
 }
 
