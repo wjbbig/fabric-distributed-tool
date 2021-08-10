@@ -1,5 +1,10 @@
 package network
 
+import (
+	"github.com/wjbbig/fabric-distributed-tool/utils"
+	"strconv"
+)
+
 type NetworkConfig struct {
 	Name       string                `yaml:"name,omitempty"`
 	Channels   map[string]*Channel   `yaml:"channels,omitempty"`
@@ -8,9 +13,12 @@ type NetworkConfig struct {
 }
 
 type Node struct {
+	hostname string
 	Name     string `yaml:"name,omitempty"`
 	NodePort int    `json:"node_port,omitempty"`
 	Type     string `yaml:"type,omitempty"`
+	OrgId    string `yaml:"org_id,omitempty"`
+	Domain   string `yaml:"domain,omitempty"`
 	Username string `yaml:"username,omitempty"`
 	Password string `yaml:"password,omitempty"`
 	Host     string `yaml:"host,omitempty"`
@@ -19,7 +27,8 @@ type Node struct {
 }
 
 type Channel struct {
-	Nodes      []string `yaml:"nodes,omitempty"`
+	Peers      []string `yaml:"peers,omitempty"`
+	Orderers   []string `yaml:"orderers,omitempty"`
 	Chaincodes []string `yaml:"chaincodes,omitempty"`
 }
 
@@ -41,5 +50,46 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, ccId, ccPath, ccVers
 	network.Chaincodes = map[string]*Chaincode{
 		ccId: chaincode,
 	}
+
+	nodes := make(map[string]*Node)
+	for _, url := range peerUrls {
+		node, err := NewNode(url, "peer")
+		if err != nil {
+			return err
+		}
+		nodes[node.hostname] = node
+	}
+	for _, url := range ordererUrls {
+		node, err := NewNode(url, "orderer")
+		if err != nil {
+			return err
+		}
+		nodes[node.hostname] = node
+	}
 	return nil
+}
+
+func NewNode(url string, nodeType string) (*Node, error) {
+	hostname, nodePortStr, username, host, sshPortStr, password := utils.SplitUrlParam(url)
+	nodePort, err := strconv.Atoi(nodePortStr)
+	if err != nil {
+		return nil, err
+	}
+	sshPort, err := strconv.Atoi(sshPortStr)
+	if err != nil {
+		return nil, err
+	}
+	name, orgId, domain := utils.SplitNameOrgDomain(hostname)
+	return &Node{
+		hostname: hostname,
+		Name:     name,
+		OrgId:    orgId,
+		Domain:   domain,
+		NodePort: nodePort,
+		Username: username,
+		Type:     nodeType,
+		Password: password,
+		Host:     host,
+		SSHPort:  sshPort,
+	}, nil
 }
