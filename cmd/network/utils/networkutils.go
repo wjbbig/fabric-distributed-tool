@@ -11,6 +11,7 @@ import (
 	docker_compose "github.com/wjbbig/fabric-distributed-tool/docker-compose"
 	"github.com/wjbbig/fabric-distributed-tool/fabricconfig"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
+	"github.com/wjbbig/fabric-distributed-tool/network"
 	"github.com/wjbbig/fabric-distributed-tool/sshutil"
 	"github.com/wjbbig/fabric-distributed-tool/utils"
 )
@@ -38,6 +39,10 @@ func GenerateCryptoConfig(dataDir string, peerUrls, ordererUrls []string) error 
 	}
 
 	return nil
+}
+
+func GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam string, peerUrls, ordererUrls []string) error {
+	return network.GenerateNetworkConfig(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, peerUrls, ordererUrls)
 }
 
 func GenerateSSHConfig(dataDir string, peerUrls, ordererUrls []string) error {

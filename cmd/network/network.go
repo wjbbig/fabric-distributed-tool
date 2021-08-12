@@ -3,10 +3,8 @@ package network
 import (
 	"github.com/spf13/cobra"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/generate"
-	"github.com/wjbbig/fabric-distributed-tool/cmd/network/generate/bootstrap"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/shutdown"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/startup"
-	"github.com/wjbbig/fabric-distributed-tool/cmd/network/testnet"
 )
 
 var networkCmd = &cobra.Command{
@@ -21,8 +19,6 @@ func Cmd() *cobra.Command {
 
 func init() {
 	networkCmd.AddCommand(generate.Cmd())
-	networkCmd.AddCommand(bootstrap.Cmd())
 	networkCmd.AddCommand(startup.Cmd())
-	networkCmd.AddCommand(testnet.Cmd())
 	networkCmd.AddCommand(shutdown.Cmd())
 }

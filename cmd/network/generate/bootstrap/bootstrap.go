@@ -14,9 +14,14 @@ var (
 	dataDir       string
 	peerUrls      []string
 	ordererUrls   []string
+	networkName   string
 	fabricVersion string
 	channelId     string
 	consensus     string
+	ccId          string
+	ccPath        string
+	ccVersion     string
+	ccInitParam   string
 	ifCouchdb     bool
 )
 
@@ -33,9 +38,14 @@ func resetFlags() {
 	// generate -p a -p b -p c
 	flags.StringArrayVarP(&peerUrls, "peerurls", "p", nil, "Urls of fabric peers")
 	flags.StringArrayVarP(&ordererUrls, "ordererurls", "o", nil, "Urls of fabric orderers")
-	flags.StringVarP(&fabricVersion, "version", "v", "1.4", "Version of fabric, value can be 1.4 or 2.0")
+	flags.StringVarP(&fabricVersion, "version", "V", "1.4", "Version of fabric, value can be 1.4 or 2.0")
 	flags.StringVarP(&channelId, "channelid", "c", "", "Fabric channel name")
 	flags.StringVarP(&consensus, "consensus", "C", "", "Orderer consensus type of fabric network")
+	flags.StringVarP(&ccId, "chaincodeid", "n", "", "Chaincode name")
+	flags.StringVarP(&ccPath, "chaincodepath", "P", "", "Chaincode path")
+	flags.StringVarP(&ccVersion, "chaincodeversion", "v", "", "chaincode version")
+	flags.StringVarP(&ccInitParam, "chaincodeinitparam", "", "", "chaincode initial params")
+	flags.StringVarP(&networkName, "network", "w", "", "Fabric network name")
 	flags.BoolVar(&ifCouchdb, "couchdb", false, "If use couchdb")
 }
 

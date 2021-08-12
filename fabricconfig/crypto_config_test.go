@@ -18,14 +18,14 @@ func TestUnmarshalCryptoConfig(t *testing.T) {
 }
 
 func TestMarshalCryptoConfig(t *testing.T) {
-	c := cryptoPeerConfig{
+	c := cryptoNodeConfig{
 		Name:          "aa",
 		Domain:        "example.com",
 		EnableNodeOUs: true,
 		Specs:         []cryptoSpec{{Hostname: "aa.example.com"}, {Hostname: "bb"}},
 		Users:         cryptoUsers{Count: 1},
 	}
-	var cpc []cryptoPeerConfig
+	var cpc []cryptoNodeConfig
 	cpc = append(cpc, c)
 	cryptoConfig := CryptoConfig{
 		PeerOrgs: cpc,

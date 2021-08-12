@@ -1,8 +1,17 @@
 package network
 
 import (
-	"github.com/wjbbig/fabric-distributed-tool/utils"
+	"io/ioutil"
+	"path/filepath"
 	"strconv"
+
+	"github.com/pkg/errors"
+	"github.com/wjbbig/fabric-distributed-tool/utils"
+	"gopkg.in/yaml.v2"
+)
+
+const (
+	defaultNetworkConfigName = "networkconfig.yaml"
 )
 
 type NetworkConfig struct {
@@ -27,6 +36,7 @@ type Node struct {
 }
 
 type Channel struct {
+	Consensus  string   `yaml:"consensus,omitempty"`
 	Peers      []string `yaml:"peers,omitempty"`
 	Orderers   []string `yaml:"orderers,omitempty"`
 	Chaincodes []string `yaml:"chaincodes,omitempty"`
@@ -38,7 +48,7 @@ type Chaincode struct {
 	InitParam string `yaml:"init_param,omitempty"`
 }
 
-func GenerateNetworkConfig(fileDir, networkName, channelId, ccId, ccPath, ccVersion, ccInitParam string, peerUrls, ordererUrls []string) error {
+func GenerateNetworkConfig(fileDir, networkName, channelId,consensus, ccId, ccPath, ccVersion, ccInitParam string, peerUrls, ordererUrls []string) error {
 	var network NetworkConfig
 
 	network.Name = networkName
@@ -51,7 +61,7 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, ccId, ccPath, ccVers
 		ccId: chaincode,
 	}
 	channels := make(map[string]*Channel)
-	channel := &Channel{}
+	channel := &Channel{Consensus: consensus}
 	nodes := make(map[string]*Node)
 	for _, url := range peerUrls {
 		node, err := NewNode(url, "peer")
@@ -73,6 +83,14 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, ccId, ccPath, ccVers
 	channels[channelId] = channel
 	network.Channels = channels
 	network.Nodes = nodes
+	data, err := yaml.Marshal(network)
+	if err != nil {
+		return errors.Wrap(err, "failed to yaml marshal network config")
+	}
+	filePath := filepath.Join(fileDir, defaultNetworkConfigName)
+	if err := ioutil.WriteFile(filePath, data, 0755); err != nil {
+		return errors.Wrap(err, "failed to write networkconfig.yaml")
+	}
 	return nil
 }
 
