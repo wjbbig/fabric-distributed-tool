@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	log "github.com/wjbbig/fabric-distributed-tool/logger"
+	"github.com/wjbbig/fabric-distributed-tool/network"
 	"github.com/wjbbig/fabric-distributed-tool/tools/cryptogen/ca"
 	"github.com/wjbbig/fabric-distributed-tool/tools/cryptogen/csp"
 	"github.com/wjbbig/fabric-distributed-tool/tools/cryptogen/msp"
@@ -79,7 +80,7 @@ type cryptoUsers struct {
 }
 
 // GenerateCryptoConfigFile 根据传入的信息生成crypto-config.yaml文件
-func GenerateCryptoConfigFile(filePath string, peers, orderers []string) error {
+func GenerateCryptoConfigFile(filePath string, peers, orderers []*network.Node) error {
 	logger.Info("begin to generate crypto-config.yaml")
 	path := filepath.Join(filePath, defaultCryptoConfigFileName)
 	var cryptoConfig CryptoConfig
@@ -87,19 +88,18 @@ func GenerateCryptoConfigFile(filePath string, peers, orderers []string) error {
 	var peerConfigs []cryptoNodeConfig
 
 	ordererMap := make(map[string]cryptoNodeConfig)
-	for _, ordererUrl := range orderers {
-		ordererName, ordererOrg, ordererDomain := utils.SplitNameOrgDomain(ordererUrl)
-		oc, ok := ordererMap[ordererDomain]
+	for _, node := range orderers {
+		oc, ok := ordererMap[node.Domain]
 		if !ok {
-			ordererMap[ordererDomain] = cryptoNodeConfig{
-				Name:          ordererOrg,
-				Domain:        ordererDomain,
+			ordererMap[node.Domain] = cryptoNodeConfig{
+				Name:          node.OrgId,
+				Domain:        node.Domain,
 				EnableNodeOUs: true,
-				Specs:         []cryptoSpec{{Hostname: ordererName}},
+				Specs:         []cryptoSpec{{Hostname: node.Name}},
 			}
 		} else {
-			oc.Specs = append(oc.Specs, cryptoSpec{Hostname: ordererName})
-			ordererMap[ordererDomain] = oc
+			oc.Specs = append(oc.Specs, cryptoSpec{Hostname: node.Name})
+			ordererMap[node.Domain] = oc
 		}
 
 	}
@@ -107,20 +107,19 @@ func GenerateCryptoConfigFile(filePath string, peers, orderers []string) error {
 		ordererConfigs = append(ordererConfigs, config)
 	}
 	peerMap := make(map[string]cryptoNodeConfig)
-	for _, peerUrl := range peers {
-		peerName, peerOrg, peerDomain := utils.SplitNameOrgDomain(peerUrl)
-		pc, ok := peerMap[peerDomain]
+	for _, node := range peers {
+		pc, ok := peerMap[node.Domain]
 		if !ok {
-			peerMap[peerDomain] = cryptoNodeConfig{
-				Name:          peerOrg,
-				Domain:        peerDomain,
+			peerMap[node.Domain] = cryptoNodeConfig{
+				Name:          node.OrgId,
+				Domain:        node.Domain,
 				EnableNodeOUs: true,
-				Specs:         []cryptoSpec{{Hostname: peerName}},
+				Specs:         []cryptoSpec{{Hostname: node.Name}},
 				Users:         cryptoUsers{Count: 1},
 			}
 		} else {
-			pc.Specs = append(pc.Specs, cryptoSpec{Hostname: peerName})
-			peerMap[peerDomain] = pc
+			pc.Specs = append(pc.Specs, cryptoSpec{Hostname: node.Name})
+			peerMap[node.Domain] = pc
 		}
 	}
 	for _, config := range peerMap {

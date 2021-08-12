@@ -19,21 +19,11 @@ import (
 // utils for network cmd
 var logger = mylogger.NewLogger()
 
-func GenerateCryptoConfig(dataDir string, peerUrls, ordererUrls []string) error {
-	var peers []string
-	var orderers []string
-	for _, url := range peerUrls {
-		index := strings.Index(url, ":")
-		peers = append(peers, url[:index])
-	}
-
-	for _, url := range ordererUrls {
-		index := strings.Index(url, ":")
-		orderers = append(orderers, url[:index])
-	}
-	if err := fabricconfig.GenerateCryptoConfigFile(dataDir, peers, orderers); err != nil {
+func GenerateCryptoConfig(dataDir string, networkConfig *network.NetworkConfig) error {
+	if err := fabricconfig.GenerateCryptoConfigFile(dataDir, networkConfig.GetPeerNodes(), networkConfig.GetOrdererNodes()); err != nil {
 		return err
 	}
+	// TODO move this step to startup cmd
 	if err := fabricconfig.GenerateKeyPairsAndCerts(dataDir); err != nil {
 		return errors.Wrap(err, "generate fabric keypairs and certs failed")
 	}
@@ -45,6 +35,7 @@ func GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, c
 	return network.GenerateNetworkConfig(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, peerUrls, ordererUrls)
 }
 
+// TODO remove this function
 func GenerateSSHConfig(dataDir string, peerUrls, ordererUrls []string) error {
 	var clients []sshutil.Client
 	for _, url := range peerUrls {
@@ -84,6 +75,7 @@ func GenerateConfigtx(dataDir, consensus, channelId string, peerUrls, ordererUrl
 	if err := fabricconfig.GenerateConfigtxFile(dataDir, consensus, orderers, peers); err != nil {
 		return err
 	}
+	// TODO move this step to startup file
 	if err := fabricconfig.GenerateGensisBlockAndChannelTxAndAnchorPeer(dataDir, channelId, orgs); err != nil {
 		return err
 	}

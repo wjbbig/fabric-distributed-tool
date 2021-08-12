@@ -12,6 +12,8 @@ import (
 
 const (
 	defaultNetworkConfigName = "networkconfig.yaml"
+	peerNode                 = "peer"
+	ordererNode              = "orderer"
 )
 
 type NetworkConfig struct {
@@ -48,7 +50,25 @@ type Chaincode struct {
 	InitParam string `yaml:"init_param,omitempty"`
 }
 
-func GenerateNetworkConfig(fileDir, networkName, channelId,consensus, ccId, ccPath, ccVersion, ccInitParam string, peerUrls, ordererUrls []string) error {
+func (nc *NetworkConfig) GetPeerNodes() (peerNodes []*Node) {
+	for _, node := range nc.Nodes {
+		if node.Type == peerNode {
+			peerNodes = append(peerNodes, node)
+		}
+	}
+	return
+}
+
+func (nc *NetworkConfig) GetOrdererNodes() (ordererNodes []*Node) {
+	for _, node := range nc.Nodes {
+		if node.Type == ordererNode {
+			ordererNodes = append(ordererNodes, node)
+		}
+	}
+	return
+}
+
+func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam string, peerUrls, ordererUrls []string) error {
 	var network NetworkConfig
 
 	network.Name = networkName
@@ -64,7 +84,7 @@ func GenerateNetworkConfig(fileDir, networkName, channelId,consensus, ccId, ccPa
 	channel := &Channel{Consensus: consensus}
 	nodes := make(map[string]*Node)
 	for _, url := range peerUrls {
-		node, err := NewNode(url, "peer")
+		node, err := NewNode(url, peerNode)
 		if err != nil {
 			return err
 		}
@@ -72,7 +92,7 @@ func GenerateNetworkConfig(fileDir, networkName, channelId,consensus, ccId, ccPa
 		channel.Peers = append(channel.Peers, node.hostname)
 	}
 	for _, url := range ordererUrls {
-		node, err := NewNode(url, "orderer")
+		node, err := NewNode(url, ordererNode)
 		if err != nil {
 			return err
 		}
