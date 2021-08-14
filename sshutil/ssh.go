@@ -23,8 +23,8 @@ func NewSSHUtil() *SSHUtil {
 	return &SSHUtil{make(map[string]*SSHClient)}
 }
 
-func (su *SSHUtil) Add(peerName, username, password, address, nodeType string) error {
-	cli, err := newSSHClient(username, password, address, nodeType)
+func (su *SSHUtil) Add(peerName, username, password, address, nodeType string, needCouchdb bool) error {
+	cli, err := newSSHClient(username, password, address, nodeType, needCouchdb)
 	if err != nil {
 		return err
 	}
@@ -43,29 +43,31 @@ func (su *SSHUtil) CloseAll() {
 }
 
 type SSHClient struct {
-	username string
-	password string
-	address  string
-	nodeType string
+	Username string
+	Password string
+	Address  string
+	NodeType string
+	NeedCouch bool
 	local    bool
 	client   *ssh.Client
 }
 
-func newSSHClient(username, password, address, nodeType string) (*SSHClient, error) {
+func newSSHClient(username, password, address, nodeType string, needCouchdb bool) (*SSHClient, error) {
 	local, err := utils.CheckLocalIp(address)
 	if err != nil {
 		return nil, err
 	}
 	cli := &SSHClient{
-		username: username,
-		password: password,
-		address:  address,
-		nodeType: nodeType,
+		Username: username,
+		Password: password,
+		Address:  address,
+		NodeType: nodeType,
+		NeedCouch: needCouchdb,
 		local:    local,
 	}
 
 	if !local {
-		if cli.client, err = ssh.Dial("tcp", cli.address, &ssh.ClientConfig{
+		if cli.client, err = ssh.Dial("tcp", cli.Address, &ssh.ClientConfig{
 			User:            username,
 			Auth:            []ssh.AuthMethod{ssh.Password(password)},
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
@@ -74,10 +76,6 @@ func newSSHClient(username, password, address, nodeType string) (*SSHClient, err
 		}
 	}
 	return cli, nil
-}
-
-func (cli *SSHClient) GetNodeType() string {
-	return cli.nodeType
 }
 
 // RunCmd 执行命令
@@ -94,7 +92,7 @@ func (cli *SSHClient) RunCmd(cmd string) error {
 	} else {
 		session, err := cli.client.NewSession()
 		if err != nil {
-			return errors.Wrapf(err, "create ssh session failed, address=%s", cli.address)
+			return errors.Wrapf(err, "create ssh session failed, address=%s", cli.Address)
 		}
 		defer session.Close()
 		session.Stdout = os.Stdout

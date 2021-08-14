@@ -21,6 +21,7 @@ var (
 	ccId          string
 	ccPath        string
 	ccVersion     string
+	ccPolicy      string
 	ccInitParam   string
 	ifCouchdb     bool
 )
@@ -44,7 +45,8 @@ func resetFlags() {
 	flags.StringVarP(&ccId, "chaincodeid", "n", "", "Chaincode name")
 	flags.StringVarP(&ccPath, "chaincodepath", "P", "", "Chaincode path")
 	flags.StringVarP(&ccVersion, "chaincodeversion", "v", "", "chaincode version")
-	flags.StringVarP(&ccInitParam, "chaincodeinitparam", "", "", "chaincode initial params")
+	flags.StringVarP(&ccPolicy, "chaincodepolicy", "r", "", "chaincode policy")
+	flags.StringVarP(&ccInitParam, "chaincodeinitparam", "i", "", "chaincode initial params")
 	flags.StringVarP(&networkName, "network", "w", "", "Fabric network name")
 	flags.BoolVar(&ifCouchdb, "couchdb", false, "If use couchdb")
 }
@@ -60,23 +62,7 @@ var bootstrapCmd = &cobra.Command{
 		if _, err := os.Stat(dataDir); err != nil {
 			_ = os.MkdirAll(dataDir, 0755)
 		}
-		if err := utils.GenerateSSHConfig(dataDir, peerUrls, ordererUrls); err != nil {
-			logger.Error(err.Error())
-			return nil
-		}
-		if err := utils.GenerateCryptoConfig(dataDir, peerUrls, ordererUrls); err != nil {
-			logger.Error(err.Error())
-			return nil
-		}
-		if err := utils.GenerateConfigtx(dataDir, consensus, channelId, peerUrls, ordererUrls); err != nil {
-			logger.Error(err.Error())
-			return nil
-		}
-		if err := utils.GenerateDockerCompose(dataDir, peerUrls, ordererUrls, ifCouchdb); err != nil {
-			logger.Error(err.Error())
-			return nil
-		}
-		if err := utils.GenerateConnectionProfile(dataDir, channelId, peerUrls, ordererUrls); err != nil {
+		if err := utils.DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam,ccPolicy, ifCouchdb, peerUrls, ordererUrls); err != nil {
 			logger.Error(err.Error())
 			return nil
 		}

@@ -1,6 +1,7 @@
 package network
 
 import (
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"strconv"
@@ -12,8 +13,8 @@ import (
 
 const (
 	defaultNetworkConfigName = "networkconfig.yaml"
-	peerNode                 = "peer"
-	ordererNode              = "orderer"
+	PeerNode                 = "peer"
+	OrdererNode              = "orderer"
 )
 
 type NetworkConfig struct {
@@ -47,12 +48,14 @@ type Channel struct {
 type Chaincode struct {
 	Path      string `yaml:"path,omitempty"`
 	Version   string `yaml:"version,omitempty"`
+	Policy    string `yaml:"policy,omitempty"`
 	InitParam string `yaml:"init_param,omitempty"`
 }
 
 func (nc *NetworkConfig) GetPeerNodes() (peerNodes []*Node) {
 	for _, node := range nc.Nodes {
-		if node.Type == peerNode {
+		if node.Type == PeerNode {
+			node.hostname = fmt.Sprintf("%s.%s", node.Name, node.Domain)
 			peerNodes = append(peerNodes, node)
 		}
 	}
@@ -61,19 +64,40 @@ func (nc *NetworkConfig) GetPeerNodes() (peerNodes []*Node) {
 
 func (nc *NetworkConfig) GetOrdererNodes() (ordererNodes []*Node) {
 	for _, node := range nc.Nodes {
-		if node.Type == ordererNode {
+		if node.Type == OrdererNode {
+			node.hostname = fmt.Sprintf("%s.%s", node.Name, node.Domain)
 			ordererNodes = append(ordererNodes, node)
 		}
 	}
 	return
 }
 
-func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam string, peerUrls, ordererUrls []string) error {
-	var network NetworkConfig
+func (nc *NetworkConfig) GetNodesByChannel(channelId string) (peerNodes []*Node, ordererNodes []*Node, err error) {
+	channel, exists := nc.Channels[channelId]
+	if !exists {
+		err = errors.Errorf("%s not exists", channelId)
+		return
+	}
+
+	for _, peerName := range channel.Peers {
+		nc.Nodes[peerName].hostname = peerName
+		peerNodes = append(peerNodes, nc.Nodes[peerName])
+	}
+	for _, ordererName := range channel.Orderers {
+		nc.Nodes[ordererName].hostname = ordererName
+		ordererNodes = append(ordererNodes, nc.Nodes[ordererName])
+	}
+
+	return
+}
+
+func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy string, peerUrls, ordererUrls []string) (*NetworkConfig, error) {
+	network := &NetworkConfig{}
 
 	network.Name = networkName
 	chaincode := &Chaincode{
 		Path:      ccPath,
+		Policy:    ccPolicy,
 		Version:   ccVersion,
 		InitParam: ccInitParam,
 	}
@@ -84,17 +108,17 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 	channel := &Channel{Consensus: consensus}
 	nodes := make(map[string]*Node)
 	for _, url := range peerUrls {
-		node, err := NewNode(url, peerNode)
+		node, err := NewNode(url, PeerNode)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		nodes[node.hostname] = node
 		channel.Peers = append(channel.Peers, node.hostname)
 	}
 	for _, url := range ordererUrls {
-		node, err := NewNode(url, ordererNode)
+		node, err := NewNode(url, OrdererNode)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		nodes[node.hostname] = node
 		channel.Orderers = append(channel.Orderers, node.hostname)
@@ -105,13 +129,26 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 	network.Nodes = nodes
 	data, err := yaml.Marshal(network)
 	if err != nil {
-		return errors.Wrap(err, "failed to yaml marshal network config")
+		return nil, errors.Wrap(err, "failed to yaml marshal network config")
 	}
 	filePath := filepath.Join(fileDir, defaultNetworkConfigName)
 	if err := ioutil.WriteFile(filePath, data, 0755); err != nil {
-		return errors.Wrap(err, "failed to write networkconfig.yaml")
+		return nil, errors.Wrap(err, "failed to write networkconfig.yaml")
 	}
-	return nil
+	return network, nil
+}
+
+func UnmarshalNetworkConfig(fileDir string) (*NetworkConfig, error) {
+	filePath := filepath.Join(fileDir, defaultNetworkConfigName)
+	data, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return nil, errors.Wrap(err, "error reading networkconfig file")
+	}
+	networkConfig := &NetworkConfig{}
+	if err := yaml.Unmarshal(data, networkConfig); err != nil {
+		return nil, errors.Wrap(err, "error unmarshaling networkConfig")
+	}
+	return networkConfig, nil
 }
 
 func NewNode(url string, nodeType string) (*Node, error) {
@@ -137,4 +174,8 @@ func NewNode(url string, nodeType string) (*Node, error) {
 		Host:     host,
 		SSHPort:  sshPort,
 	}, nil
+}
+
+func (n *Node) GetHostname() string {
+	return n.hostname
 }

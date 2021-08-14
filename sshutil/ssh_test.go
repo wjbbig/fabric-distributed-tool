@@ -28,11 +28,11 @@ func TestSSH(t *testing.T) {
 }
 
 func TestSshClient_RunCmd(t *testing.T) {
-	localCli, err := newSSHClient("ubuntu", "123456", "127.0.0.1:22", "peer")
+	localCli, err := newSSHClient("ubuntu", "123456", "127.0.0.1:22", "peer", false)
 	require.NoError(t, err)
 	defer localCli.Close()
 	require.Equal(t, localCli.local, true)
-	remoteCli, err := newSSHClient("root", "Blockchain@123", "101.91.231.36:22", "peer")
+	remoteCli, err := newSSHClient("root", "Blockchain@123", "101.91.231.36:22", "peer", false)
 	require.NoError(t, err)
 	defer remoteCli.Close()
 	require.Equal(t, remoteCli.local, false)
@@ -45,7 +45,7 @@ func TestSshClient_RunCmd(t *testing.T) {
 }
 
 func TestSshClient_Sftp(t *testing.T) {
-	remoteCli, err := newSSHClient("root", "Blockchain@123", "101.91.231.36:22", "peer")
+	remoteCli, err := newSSHClient("root", "Blockchain@123", "101.91.231.36:22", "peer", false)
 	require.NoError(t, err)
 	defer remoteCli.Close()
 	//err = remoteCli.Sftp("/opt/db/cache.db", "/root")

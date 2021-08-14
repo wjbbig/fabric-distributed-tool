@@ -2,17 +2,17 @@ package fabricconfig
 
 import (
 	"fmt"
-	fconfigtx "github.com/hyperledger/fabric-config/configtx"
-	"github.com/pkg/errors"
-	"github.com/wjbbig/fabric-distributed-tool/utils"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
+
+	fconfigtx "github.com/hyperledger/fabric-config/configtx"
+	"github.com/pkg/errors"
+	"github.com/wjbbig/fabric-distributed-tool/network"
+	"github.com/wjbbig/fabric-distributed-tool/utils"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -100,59 +100,53 @@ type ConfigtxApplication struct {
 }
 
 // orderPeerOrdererByOrg 将相同组织的节点整理在一起
-func orderPeerOrdererByOrg(urls []string) map[string][]string {
-	orderedUrl := make(map[string][]string)
-	for _, url := range urls {
-		_, org, _ := utils.SplitNameOrgDomain(url)
-		orderedUrl[org] = append(orderedUrl[org], url)
+func orderPeerOrdererByOrg(nodes []*network.Node) map[string][]*network.Node {
+	orderedUrl := make(map[string][]*network.Node)
+	for _, node := range nodes {
+		orderedUrl[node.OrgId] = append(orderedUrl[node.OrgId], node)
 	}
 	return orderedUrl
 }
 
-func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers []string) error {
-	logger.Infof("begin to generate configtx.yaml, orderer type=%s", ordererType)
+func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers []*network.Node) error {
+	logger.Infof("begin to generate configtx.yaml, consensus type=%s", ordererType)
 	defer logger.Info("finish generating configtx.yaml")
 	var configtx Configtx
 	var consenters []ConfigtxConsenter
 	var ordererOrganizations []ConfigtxOrganization
 	ordererOrgsPath := filepath.Join(filePath, "crypto-config", "ordererOrganizations")
 	ordererMap := orderPeerOrdererByOrg(orderers)
-	for _, ordererUrls := range ordererMap {
-		for _, url := range ordererUrls {
-			ordererArgs := strings.Split(url, ":")
-			_, _, ordererDomain := utils.SplitNameOrgDomain(ordererArgs[0])
-			serverCertPath := filepath.Join(ordererOrgsPath, ordererDomain, "orderers", ordererArgs[0], "tls/server.crt")
-			port, err := strconv.Atoi(ordererArgs[1])
-			if err != nil {
-				return errors.Wrap(err, "get orderer port failed")
-			}
+	var ordererAddresses []string
+	for _, ordererNodes := range ordererMap {
+		for _, node := range ordererNodes {
+			serverCertPath := filepath.Join(ordererOrgsPath, node.Domain, "orderers", node.GetHostname(), "tls/server.crt")
 			consenter := ConfigtxConsenter{
-				Host:          ordererArgs[0],
-				Port:          uint32(port),
+				Host:          node.GetHostname(),
+				Port:          uint32(node.NodePort),
 				ClientTLSCert: serverCertPath,
 				ServerTLSCert: serverCertPath,
 			}
 			consenters = append(consenters, consenter)
+			ordererAddresses = append(ordererAddresses, fmt.Sprintf("%s:%d", node.GetHostname(), node.NodePort))
 		}
-		ordererArgs := strings.Split(ordererUrls[0], ":")
-		_, ordererOrgName, ordererDomain := utils.SplitNameOrgDomain(ordererArgs[0])
+		ordererNode := ordererNodes[0]
 
 		ordererOrganization := ConfigtxOrganization{
-			Name:   ordererOrgName,
-			ID:     ordererOrgName,
-			MSPDir: filepath.Join(ordererOrgsPath, ordererDomain, "msp"),
+			Name:   ordererNode.OrgId,
+			ID:     ordererNode.OrgId,
+			MSPDir: filepath.Join(ordererOrgsPath, ordererNode.Domain, "msp"),
 			Policies: map[string]ConfigtxPolicy{
 				fconfigtx.ReadersPolicyKey: {
 					Type: fconfigtx.SignaturePolicyType,
-					Rule: fmt.Sprintf("OR('%[1]s.admin','%[1]s.orderer','%[1]s.client')", ordererOrgName),
+					Rule: fmt.Sprintf("OR('%[1]s.admin','%[1]s.orderer','%[1]s.client')", ordererNode.OrgId),
 				},
 				fconfigtx.WritersPolicyKey: {
 					Type: fconfigtx.SignaturePolicyType,
-					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.orderer', '%[1]s.client')", ordererOrgName),
+					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.orderer', '%[1]s.client')", ordererNode.OrgId),
 				},
 				fconfigtx.AdminsPolicyKey: {
 					Type: fconfigtx.SignaturePolicyType,
-					Rule: fmt.Sprintf("OR('%s.admin')", ordererOrgName),
+					Rule: fmt.Sprintf("OR('%s.admin')", ordererNode.OrgId),
 				},
 			},
 		}
@@ -161,7 +155,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 
 	orderer := ConfigtxOrderer{
 		OrdererType:  ordererType,
-		Addresses:    orderers,
+		Addresses:    ordererAddresses,
 		BatchTimeout: "2s",
 		BatchSize: ConfigtxBatchSize{
 			MaxMessageCount:   10,
@@ -196,37 +190,32 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 	var peerOrganizations []ConfigtxOrganization
 	peerOrgsPath := filepath.Join(filePath, "crypto-config", "peerOrganizations")
 	peerMap := orderPeerOrdererByOrg(peers)
-	for _, peerUrls := range peerMap {
+	for _, peerNodes := range peerMap {
 		rand.Seed(time.Now().UnixNano())
-		peerIndex := rand.Intn(len(peerUrls))
-		peerArgs := strings.Split(peerUrls[peerIndex], ":")
-		port, err := strconv.Atoi(peerArgs[1])
-		if err != nil {
-			return err
-		}
+		peerIndex := rand.Intn(len(peerNodes))
+		randomPeer := peerNodes[peerIndex]
 		var anchorPeers []ConfigtxAnchorPeer
 		anchorPeer := ConfigtxAnchorPeer{
-			Host: peerArgs[0],
-			Port: uint32(port),
+			Host: randomPeer.GetHostname(),
+			Port: uint32(randomPeer.NodePort),
 		}
 		anchorPeers = append(anchorPeers, anchorPeer)
-		_, org, domain := utils.SplitNameOrgDomain(peerArgs[0])
 		peerOrganization := ConfigtxOrganization{
-			Name:   org,
-			ID:     org,
-			MSPDir: filepath.Join(peerOrgsPath, domain, "msp"),
+			Name:   randomPeer.OrgId,
+			ID:     randomPeer.OrgId,
+			MSPDir: filepath.Join(peerOrgsPath, randomPeer.Domain, "msp"),
 			Policies: map[string]ConfigtxPolicy{
 				fconfigtx.ReadersPolicyKey: {
 					Type: fconfigtx.SignaturePolicyType,
-					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.peer', '%[1]s.client')", org),
+					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.peer', '%[1]s.client')", randomPeer.OrgId),
 				},
 				fconfigtx.WritersPolicyKey: {
 					Type: fconfigtx.SignaturePolicyType,
-					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.client')", org),
+					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.client')", randomPeer.OrgId),
 				},
 				fconfigtx.AdminsPolicyKey: {
 					Type: fconfigtx.SignaturePolicyType,
-					Rule: fmt.Sprintf("OR('%s.admin')", org),
+					Rule: fmt.Sprintf("OR('%s.admin')", randomPeer.OrgId),
 				},
 			},
 			AnchorPeers: anchorPeers,
@@ -563,7 +552,7 @@ func GenerateLocallyTestNetworkConfigtx(filePath string) error {
 		Policies: map[string]ConfigtxPolicy{
 			"Readers": {
 				Type: "ImplicitMeta",
-				Rule: fmt.Sprintf("ANY Readers"),
+				Rule: "ANY Readers",
 			},
 			"Writers": {
 				Type: "ImplicitMeta",
@@ -584,7 +573,7 @@ func GenerateLocallyTestNetworkConfigtx(filePath string) error {
 	return ioutil.WriteFile(path, data, 0755)
 }
 
-func GenerateGensisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId string, peerOrgs []string) error {
+func GenerateGensisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId string, nc *network.NetworkConfig) error {
 	// generate genesis.block
 	configtxgenPath := filepath.Join("tools", "configtxgen")
 	channelArtifactsPath := filepath.Join(fileDir, "channel-artifacts")
@@ -618,10 +607,18 @@ func GenerateGensisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId stri
 		return err
 	}
 
+	peerNodes, _, err := nc.GetNodesByChannel(channelId)
+	if err != nil {
+		return nil
+	}
+	peerOrgs := make(map[string]interface{})
+	for _, node := range peerNodes {
+		peerOrgs[node.OrgId] = nil
+	}
 	// TODO: does fabric2.x need this step???
 	// generate anchor peer transaction
 	// ./bin/configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate ./channel-artifacts/Org1anchors.tx -channelID $CHANNEL_NAME -asOrg Org1MSP
-	for _, org := range peerOrgs {
+	for org, _ := range peerOrgs {
 		logger.Infof("begin to generate anchors.tx, org=%s", org)
 		args = []string{
 			fmt.Sprintf("--configPath=%s", fileDir),

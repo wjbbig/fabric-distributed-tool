@@ -2,15 +2,17 @@ package docker_compose
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
-	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
-	"github.com/wjbbig/fabric-distributed-tool/utils"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/pkg/errors"
+	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
+	"github.com/wjbbig/fabric-distributed-tool/network"
+	"github.com/wjbbig/fabric-distributed-tool/utils"
+	"gopkg.in/yaml.v2"
 )
 
 var logger = mylogger.NewLogger()
@@ -42,21 +44,19 @@ type ExternalNetwork struct {
 }
 
 // GenerateOrdererDockerComposeFile 生成启动orderer的docker-compose文件
-func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherUrls []string) error {
+func GenerateOrdererDockerComposeFile(filePath string, orderer *network.Node, otherUrls []string) error {
 	var dockerCompose DockerCompose
-	ordererURLArgs := strings.Split(ordererUrl, ":")
-	logger.Infof("begin to generate docker_compose file, url=%s", ordererURLArgs[0])
+	logger.Infof("begin to generate docker_compose file, url=%s", orderer.GetHostname())
 
-	_, orgName, domain := utils.SplitNameOrgDomain(ordererURLArgs[0])
 	ordererService := Service{
-		ContainerName: ordererURLArgs[0],
+		ContainerName: orderer.GetHostname(),
 		Image:         "hyperledger/fabric-orderer",
 		Environment: []string{
 			"FABRIC_LOGGING_SPEC=INFO",
 			"ORDERER_GENERAL_LISTENADDRESS=0.0.0.0",
 			"ORDERER_GENERAL_GENESISMETHOD=file",
 			"ORDERER_GENERAL_GENESISFILE=/var/hyperledger/orderer/orderer.genesis.block",
-			fmt.Sprintf("ORDERER_GENERAL_LOCALMSPID=%s", orgName),
+			fmt.Sprintf("ORDERER_GENERAL_LOCALMSPID=%s", orderer.OrgId),
 			"ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp",
 			"ORDERER_GENERAL_TLS_ENABLED=true",
 			"ORDERER_GENERAL_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key",
@@ -73,17 +73,17 @@ func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherU
 		Volumes: []string{
 			fmt.Sprintf("%s/channel-artifacts/genesis.block:/var/hyperledger/orderer/orderer.genesis.block", filePath),
 			fmt.Sprintf("%s/crypto-config/ordererOrganizations/%s/orderers/%s/msp:/var/hyperledger/orderer/msp",
-				filePath, domain, ordererURLArgs[0]),
+				filePath, orderer.Domain, orderer.GetHostname()),
 			fmt.Sprintf("%s/crypto-config/ordererOrganizations/%s/orderers/%s/tls/:/var/hyperledger/orderer/tls",
-				filePath, domain, ordererURLArgs[0]),
+				filePath, orderer.Domain, orderer.GetHostname()),
 			// fmt.Sprintf("%s:/var/hyperledger/production/orderer", ordererURLArgs[0]),
 		},
-		Ports:      []string{fmt.Sprintf("%[1]s:%[1]s", ordererURLArgs[1])},
+		Ports:      []string{fmt.Sprintf("%[1]d:%[1]d", orderer.NodePort)},
 		Networks:   []string{defaultNetworkName},
 		ExtraHosts: otherUrls,
 	}
 	dockerCompose.Services = map[string]Service{
-		ordererURLArgs[0]: ordererService,
+		orderer.GetHostname(): ordererService,
 	}
 	dockerCompose.Version = `2`
 	dockerCompose.Networks = map[string]ExternalNetwork{
@@ -96,27 +96,25 @@ func GenerateOrdererDockerComposeFile(filePath string, ordererUrl string, otherU
 		}
 	}
 	filePath = filepath.Join(filePath, fmt.Sprintf("%s%s.yaml", defaultDockerComposeFile,
-		strings.ReplaceAll(ordererURLArgs[0], ".", "-")))
+		strings.ReplaceAll(orderer.GetHostname(), ".", "-")))
 	data, err := yaml.Marshal(dockerCompose)
 	if err != nil {
 		return err
 	}
 	if err := ioutil.WriteFile(filePath, data, 0755); err != nil {
-		return errors.Wrapf(err, "failed to write peer docker_compose file, url=%s", ordererURLArgs[0])
+		return errors.Wrapf(err, "failed to write peer docker_compose file, url=%s", orderer.GetHostname())
 	}
-	logger.Infof("finish generating peer docker_compose file, url=%s", ordererURLArgs[0])
+	logger.Infof("finish generating peer docker_compose file, url=%s", orderer.GetHostname())
 	return nil
 }
 
 // GeneratePeerDockerComposeFile 生产peer的docker-compose启动文件
-func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootstrapPeerUrl string, otherUrls []string, couchdb bool) error {
+func GeneratePeerDockerComposeFile(filePath string, peer *network.Node, gossipBootstrapPeerUrl string, otherUrls []string, couchdb bool) error {
 	var dockerCompose DockerCompose
-	peerUrlArgs := strings.Split(peerUrl, ":")
-	logger.Infof("begin to generate peer docker_compose file, url=%s", peerUrlArgs[0])
-	_, orgName, domain := utils.SplitNameOrgDomain(peerUrlArgs[0])
+	logger.Infof("begin to generate peer docker_compose file, url=%s", peer.GetHostname())
 	networkPrefix := path.Base(filePath)
 	peerService := Service{
-		ContainerName: peerUrlArgs[0],
+		ContainerName: peer.GetHostname(),
 		Image:         "hyperledger/fabric-peer",
 		WorkingDir:    "/opt/gopath/src/github.com/hyperledger/fabric/peer",
 		Environment: []string{
@@ -130,23 +128,23 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 			"CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt",
 			"CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key",
 			"CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt",
-			fmt.Sprintf("CORE_PEER_ID=%s", peerUrlArgs[0]),
-			fmt.Sprintf("CORE_PEER_ADDRESS=%s", peerUrl),
-			fmt.Sprintf("CORE_PEER_LISTENADDRESS=0.0.0.0:%s", peerUrlArgs[1]),
-			fmt.Sprintf("CORE_PEER_CHAINCODEADDRESS=%s:7052", peerUrlArgs[0]),
-			"CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:7052",
+			fmt.Sprintf("CORE_PEER_ID=%s", peer.GetHostname()),
+			fmt.Sprintf("CORE_PEER_ADDRESS=%s:%d", peer.GetHostname(), peer.NodePort),
+			fmt.Sprintf("CORE_PEER_LISTENADDRESS=0.0.0.0:%s", peer.GetHostname()),
+			fmt.Sprintf("CORE_PEER_CHAINCODEADDRESS=%s:%d", peer.GetHostname(), peer.NodePort+1),
+			fmt.Sprintf("CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:%d", peer.NodePort+1),
 			fmt.Sprintf("CORE_PEER_GOSSIP_BOOTSTRAP=%s", gossipBootstrapPeerUrl),
-			fmt.Sprintf("CORE_PEER_GOSSIP_EXTERNALENDPOINT=%s", peerUrl),
-			fmt.Sprintf("CORE_PEER_LOCALMSPID=%s", orgName),
+			fmt.Sprintf("CORE_PEER_GOSSIP_EXTERNALENDPOINT=%s:%d", peer.GetHostname(), peer.NodePort),
+			fmt.Sprintf("CORE_PEER_LOCALMSPID=%s", peer.OrgId),
 		},
 		Command: "peer node start",
 		Volumes: []string{
 			"/var/run/:/host/var/run/",
-			fmt.Sprintf("%s/crypto-config/peerOrganizations/%s/peers/%s/msp:/etc/hyperledger/fabric/msp", filePath, domain, peerUrlArgs[0]),
-			fmt.Sprintf("%s/crypto-config/peerOrganizations/%s/peers/%s/tls:/etc/hyperledger/fabric/tls", filePath, domain, peerUrlArgs[0]),
+			fmt.Sprintf("%s/crypto-config/peerOrganizations/%s/peers/%s/msp:/etc/hyperledger/fabric/msp", filePath, peer.Domain, peer.GetHostname()),
+			fmt.Sprintf("%s/crypto-config/peerOrganizations/%s/peers/%s/tls:/etc/hyperledger/fabric/tls", filePath, peer.Domain, peer.GetHostname()),
 			// fmt.Sprintf("%s:/var/hyperledger/production", peerUrlArgs[0]),
 		},
-		Ports:      []string{fmt.Sprintf("%[1]s:%[1]s", peerUrlArgs[1])},
+		Ports:      []string{fmt.Sprintf("%[1]d:%[1]d", peer.NodePort)},
 		Networks:   []string{defaultNetworkName},
 		ExtraHosts: otherUrls,
 	}
@@ -163,7 +161,7 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 	}
 	// generate docker compose file if using couchdb
 	if couchdb {
-		couchdbServiceName, err := GenerateCouchDB(filePath, peerUrlArgs[0])
+		couchdbServiceName, err := GenerateCouchDB(filePath, peer.GetHostname())
 		if err != nil {
 			return err
 		}
@@ -173,18 +171,18 @@ func GeneratePeerDockerComposeFile(filePath string, peerUrl string, gossipBootst
 		peerService.Environment = append(peerService.Environment, "CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=")
 	}
 	dockerCompose.Services = map[string]Service{
-		peerUrlArgs[0]: peerService,
+		peer.GetHostname(): peerService,
 	}
 	filePath = filepath.Join(filePath, fmt.Sprintf("%s%s.yaml", defaultDockerComposeFile,
-		strings.ReplaceAll(peerUrlArgs[0], ".", "-")))
+		strings.ReplaceAll(peer.GetHostname(), ".", "-")))
 	data, err := yaml.Marshal(dockerCompose)
 	if err != nil {
 		return err
 	}
 	if err := ioutil.WriteFile(filePath, data, 0755); err != nil {
-		return errors.Wrapf(err, "failed to write peer docker_compose file, url=%s", peerUrlArgs[0])
+		return errors.Wrapf(err, "failed to write peer docker_compose file, url=%s", peer.GetHostname())
 	}
-	logger.Infof("finish generating peer docker_compose file, url=%s", peerUrlArgs[0])
+	logger.Infof("finish generating peer docker_compose file, url=%s", peer.GetHostname())
 	return nil
 }
 

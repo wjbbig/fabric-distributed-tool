@@ -57,6 +57,6 @@ func TestSplitPeerOrOrdererUrl(t *testing.T) {
 }
 
 func TestGenerateCryptoConfigFile(t *testing.T) {
-	err := GenerateCryptoConfigFile("./", []string{"ab.testorg", "cd.testorg1", "ef.testorg1"}, []string{"orderer1.ordererOrg", "orderer2.ordererOrg"})
+	err := GenerateCryptoConfigFile("./", nil, nil)
 	require.NoError(t, err)
 }

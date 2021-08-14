@@ -3,7 +3,7 @@ package shutdown
 import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/wjbbig/fabric-distributed-tool/cmd/network/utils"
+	// "github.com/wjbbig/fabric-distributed-tool/cmd/network/utils"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
 )
 
@@ -23,16 +23,16 @@ var shutdownCmd = &cobra.Command{
 		if dataDir == "" {
 			logger.Error("dataDir is not specified")
 		}
-		sshUtil, err := utils.ReadSSHConfig(dataDir)
-		if err != nil {
-			logger.Error(err.Error())
-			return nil
-		}
-		defer sshUtil.CloseAll()
-		if err := utils.ShutdownNetwork(sshUtil, dataDir); err != nil {
-			logger.Error(err.Error())
-			return nil
-		}
+		// sshUtil, err := utils.ReadSSHConfig(dataDir)
+		// if err != nil {
+		// 	logger.Error(err.Error())
+		// 	return nil
+		// }
+		// defer sshUtil.CloseAll()
+		// if err := utils.ShutdownNetwork(sshUtil, dataDir); err != nil {
+		// 	logger.Error(err.Error())
+		// 	return nil
+		// }
 		return nil
 	},
 }

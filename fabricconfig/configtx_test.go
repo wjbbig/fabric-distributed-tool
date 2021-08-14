@@ -10,7 +10,7 @@ func TestGenerateLocallyTestNetworkConfigtx(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestGenerateConfigtxFile(t *testing.T) {
+/* func TestGenerateConfigtxFile(t *testing.T) {
 	err := GenerateConfigtxFile("./", "solo", []string{"orderer.example.com:7050"},
 		[]string{"peer0.org1.example.com:7051", "peer1.org1.example.com:8051", "peer0.org2.example.com:9051"})
 	require.NoError(t, err)
@@ -28,3 +28,4 @@ func TestGenerateConfigFiles(t *testing.T) {
 			"peer0.org2.example.com:9051", "peer1.org2.example.com:10051"})
 	require.NoError(t, err)
 }
+ */

@@ -647,13 +647,13 @@ func parseTemplate(input string, data interface{}) (string, error) {
 
 	t, err := template.New("parse").Parse(input)
 	if err != nil {
-		return "", fmt.Errorf("Error parsing template: %s", err)
+		return "", fmt.Errorf("error parsing template: %s", err)
 	}
 
 	output := new(bytes.Buffer)
 	err = t.Execute(output, data)
 	if err != nil {
-		return "", fmt.Errorf("Error executing template: %s", err)
+		return "", fmt.Errorf("error executing template: %s", err)
 	}
 
 	return output.String(), nil

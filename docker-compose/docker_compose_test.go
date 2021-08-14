@@ -14,10 +14,10 @@ func TestDetectImageNameAndTag(t *testing.T) {
 	t.Log(tag)
 }
 
-func TestGeneratePeerDockerComposeFile(t *testing.T) {
-	err := GeneratePeerDockerComposeFile(".", "peer0.org1.example.com:7050", "peer0.org1.example.com:7050", nil, false)
-	require.NoError(t, err)
-}
+// func TestGeneratePeerDockerComposeFile(t *testing.T) {
+// 	err := GeneratePeerDockerComposeFile(".", "peer0.org1.example.com:7050", "peer0.org1.example.com:7050", nil, false)
+// 	require.NoError(t, err)
+// }
 
 func TestBasePath(t *testing.T) {
 	base := path.Base("/opt/fdt")
