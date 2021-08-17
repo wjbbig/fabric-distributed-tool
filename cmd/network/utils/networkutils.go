@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/wjbbig/fabric-distributed-tool/sdkutil"
 	"github.com/wjbbig/fabric-distributed-tool/connectionprofile"
 	docker_compose "github.com/wjbbig/fabric-distributed-tool/docker-compose"
 	"github.com/wjbbig/fabric-distributed-tool/fabricconfig"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
 	"github.com/wjbbig/fabric-distributed-tool/network"
+	"github.com/wjbbig/fabric-distributed-tool/sdkutil"
 	"github.com/wjbbig/fabric-distributed-tool/sshutil"
 	"github.com/wjbbig/fabric-distributed-tool/utils"
 )
@@ -29,8 +29,8 @@ func GenerateCryptoConfig(dataDir string, networkConfig *network.NetworkConfig) 
 	return nil
 }
 
-func GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy string, peerUrls, ordererUrls []string) (*network.NetworkConfig, error) {
-	return network.GenerateNetworkConfig(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy, peerUrls, ordererUrls)
+func GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string) (*network.NetworkConfig, error) {
+	return network.GenerateNetworkConfig(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy, ccInitRequired, sequence, couchdb, peerUrls, ordererUrls)
 }
 
 func GenerateConfigtx(dataDir, consensus, channelId string, networkConfig *network.NetworkConfig) error {
@@ -205,13 +205,27 @@ func ShutdownNetwork(sshUtil *sshutil.SSHUtil, dataDir string) error {
 		if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s down -v", dockerComposeFilePath)); err != nil {
 			logger.Info(err.Error())
 		}
+
+		// delete couchdb container
+		if client.NeedCouch {
+			dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-couchdb.yaml", strings.ReplaceAll(name, ".", "-")))
+			if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s down -v", dockerComposeFilePath)); err != nil {
+				logger.Info(err.Error())
+			}
+		}
+
+		// TODO: delete chaincode container and image
+		// if client.NodeType == network.PeerNode {
+		// 	if err := client.RunCmd("docker rm -f $(docker ps -a -q |  grep \"dev*\"  | awk '{print $1}')"); err != nil {
+		// 		logger.Info(err.Error())
+		// 	}
+		// }
 	}
 	return nil
 }
 
 func CreateChannel(nc *network.NetworkConfig, dataDir string, channelId string, sdk *sdkutil.FabricSDKDriver) error {
 	var peerEndpoint, orgId, ordererEndpoint string
-	// TODO a better way to find peer and orderer
 	// find a random orderer
 	peerNodes, ordererNodes, err := nc.GetNodesByChannel(channelId)
 	if err != nil {
@@ -276,8 +290,8 @@ func InstantiateCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId
 }
 
 // ==========================cmd=========================
-func DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy string, ifCouchdb bool, peerUrls, ordererUrls []string) error {
-	networkConfig, err := GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy, peerUrls, ordererUrls)
+func DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, ifCouchdb bool, peerUrls, ordererUrls []string) error {
+	networkConfig, err := GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy, ccInitRequired, sequence, ifCouchdb, peerUrls, ordererUrls)
 	if err != nil {
 		return err
 	}
@@ -305,7 +319,7 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 		return err
 	}
 	// startup command only starts a fabric network with one channel and one chaincode right now
-	// TODO support multi channels
+	// TODO: support multi channels
 	var channelId, ccId, ccPath, ccInitParam, ccVersion, ccPolicy string
 	var ifInstallCC bool
 	for name, channel := range nc.Channels {
@@ -365,6 +379,22 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 			ccPolicy, ccInitParam, sdk); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func DoShutdownCommand(dataDir string) error {
+	nc, err := network.UnmarshalNetworkConfig(dataDir)
+	if err != nil {
+		return err
+	}
+	sshUtil, err := ReadSSHConfigFromNetwork(nc)
+	if err != nil {
+		return err
+	}
+	defer sshUtil.CloseAll()
+	if err := ShutdownNetwork(sshUtil, dataDir); err != nil {
+		return err
 	}
 	return nil
 }

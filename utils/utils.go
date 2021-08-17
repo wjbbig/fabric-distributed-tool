@@ -8,10 +8,12 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/pkg/errors"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -116,4 +118,30 @@ func DetectImageNameAndTag(keyword string) (string, error) {
 	}
 
 	return "", errors.Errorf("there is no docker image containing keyword %s", keyword)
+}
+
+func WriteFile(filename string, data []byte, perm os.FileMode) error {
+	dirPath := filepath.Dir(filename)
+	exists, err := DirExists(dirPath)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		err = os.MkdirAll(dirPath, 0750)
+		if err != nil {
+			return err
+		}
+	}
+	return ioutil.WriteFile(filename, data, perm)
+}
+
+func DirExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }

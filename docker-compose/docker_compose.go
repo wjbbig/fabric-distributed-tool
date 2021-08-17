@@ -130,7 +130,7 @@ func GeneratePeerDockerComposeFile(filePath string, peer *network.Node, gossipBo
 			"CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt",
 			fmt.Sprintf("CORE_PEER_ID=%s", peer.GetHostname()),
 			fmt.Sprintf("CORE_PEER_ADDRESS=%s:%d", peer.GetHostname(), peer.NodePort),
-			fmt.Sprintf("CORE_PEER_LISTENADDRESS=0.0.0.0:%s", peer.GetHostname()),
+			fmt.Sprintf("CORE_PEER_LISTENADDRESS=0.0.0.0:%d", peer.NodePort),
 			fmt.Sprintf("CORE_PEER_CHAINCODEADDRESS=%s:%d", peer.GetHostname(), peer.NodePort+1),
 			fmt.Sprintf("CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:%d", peer.NodePort+1),
 			fmt.Sprintf("CORE_PEER_GOSSIP_BOOTSTRAP=%s", gossipBootstrapPeerUrl),

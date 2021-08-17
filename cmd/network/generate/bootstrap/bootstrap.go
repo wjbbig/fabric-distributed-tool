@@ -11,19 +11,21 @@ import (
 var logger = mylogger.NewLogger()
 
 var (
-	dataDir       string
-	peerUrls      []string
-	ordererUrls   []string
-	networkName   string
-	fabricVersion string
-	channelId     string
-	consensus     string
-	ccId          string
-	ccPath        string
-	ccVersion     string
-	ccPolicy      string
-	ccInitParam   string
-	ifCouchdb     bool
+	dataDir        string
+	peerUrls       []string
+	ordererUrls    []string
+	networkName    string
+	fabricVersion  string
+	channelId      string
+	consensus      string
+	ccId           string
+	ccPath         string
+	ccVersion      string
+	ccPolicy       string
+	ccInitParam    string
+	ccInitRequired bool
+	ccSequence     int64
+	ifCouchdb      bool
 )
 
 // peer0.org1.example.com:7050@username@127.0.0.1:22:password
@@ -49,6 +51,8 @@ func resetFlags() {
 	flags.StringVarP(&ccInitParam, "chaincodeinitparam", "i", "", "chaincode initial params")
 	flags.StringVarP(&networkName, "network", "w", "", "Fabric network name")
 	flags.BoolVar(&ifCouchdb, "couchdb", false, "If use couchdb")
+	flags.BoolVar(&ccInitRequired, "init", false, "If chaincode needs init")
+	flags.Int64VarP(&ccSequence, "seq", "s", 1, "Chaincode sequence for fabric v2.0")
 }
 
 var bootstrapCmd = &cobra.Command{
@@ -62,7 +66,7 @@ var bootstrapCmd = &cobra.Command{
 		if _, err := os.Stat(dataDir); err != nil {
 			_ = os.MkdirAll(dataDir, 0755)
 		}
-		if err := utils.DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam,ccPolicy, ifCouchdb, peerUrls, ordererUrls); err != nil {
+		if err := utils.DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy, ccInitRequired, ccSequence, ifCouchdb, peerUrls, ordererUrls); err != nil {
 			logger.Error(err.Error())
 			return nil
 		}
