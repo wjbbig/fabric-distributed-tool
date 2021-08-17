@@ -2,6 +2,7 @@ package sdkutil
 
 import (
 	"fmt"
+	"github.com/hyperledger/fabric-sdk-go/pkg/client/channel"
 	"path/filepath"
 
 	pb "github.com/hyperledger/fabric-protos-go/peer"
@@ -23,14 +24,14 @@ var logger = mylogger.NewLogger()
 
 // utils of fabric-sdk-go
 
-type SDKUtil interface {
-	CreateChannel(channelId string, orgId string, fileDir string, ordererEndpoint string, peerEndpoint string) error
-	JoinChannel(channelId string, orgId string, ordererEndpoint string, peerEndpoint string) error
-	InstallCC(ccId, ccPath, ccVersion, channelId, orgId, peerEndpoint string) error
-	InstantiateCC(ccId, ccPath, ccVersion, channelId, orgId, policy, peerEndpoint string, initArgs []string) error
-	UpdateCC(ccId, ccPath, ccVersion, channelId, orgId, policy string, initArgs []string) error
-	Close()
-}
+//type SDKUtil interface {
+//	CreateChannel(channelId string, orgId string, fileDir string, ordererEndpoint string, peerEndpoint string) error
+//	JoinChannel(channelId string, orgId string, ordererEndpoint string, peerEndpoint string) error
+//	InstallCC(ccId, ccPath, ccVersion, channelId, orgId, peerEndpoint string) error
+//	InstantiateCC(ccId, ccPath, ccVersion, channelId, orgId, policy, peerEndpoint string, initArgs []string) error
+//	UpdateCC(ccId, ccPath, ccVersion, channelId, orgId, policy string, initArgs []string) error
+//	Close()
+//}
 
 const defaultUsername = "Admin"
 
@@ -221,11 +222,22 @@ func (driver *FabricSDKDriver) InstallCCV2(ccId, channelId, orgId, peerEndpoint 
 	return nil
 }
 
-func (driver *FabricSDKDriver) QueryInstalled(ccId, channelId, orgId, peerEndpoint, packageId string) error {
+func (driver *FabricSDKDriver) QueryInstalled(channelId, orgId, peerEndpoint string) error {
+	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
+	resMgmtClient, err := resmgmt.New(clientContext)
+	if err != nil {
+		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
+	}
+	resp, err := resMgmtClient.LifecycleQueryInstalledCC(resmgmt.WithTargetEndpoints(peerEndpoint),
+		resmgmt.WithRetry(retry.DefaultResMgmtOpts))
+	if err != nil {
+		return errors.Wrap(err, "query chaincode installed failed")
+	}
+	logger.Infof("chaincode installed on %s:\n%v", peerEndpoint, resp)
 	return nil
 }
 
-func (driver *FabricSDKDriver) ApproveCC(ccId, ccVersion, ccPolicy, channelId, orgId, peerEndpoint, ordererEndpoint, packageId string) error {
+func (driver *FabricSDKDriver) ApproveCC(ccId, ccVersion, ccPolicy, channelId, orgId, peerEndpoint, ordererEndpoint, packageId string, sequence int64) error {
 	policy, err := policydsl.FromString(ccPolicy)
 	if err != nil {
 		return errors.Wrap(err, "build ccPolicy failed")
@@ -236,11 +248,10 @@ func (driver *FabricSDKDriver) ApproveCC(ccId, ccVersion, ccPolicy, channelId, o
 		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
 	}
 	approveCCReq := resmgmt.LifecycleApproveCCRequest{
-		Name:      ccId,
-		Version:   ccVersion,
-		PackageID: packageId,
-		// TODO: sequence
-		Sequence:          1,
+		Name:              ccId,
+		Version:           ccVersion,
+		PackageID:         packageId,
+		Sequence:          sequence,
 		EndorsementPlugin: "escc",
 		ValidationPlugin:  "vscc",
 		SignaturePolicy:   policy,
@@ -255,34 +266,79 @@ func (driver *FabricSDKDriver) ApproveCC(ccId, ccVersion, ccPolicy, channelId, o
 	return nil
 }
 
-func (driver *FabricSDKDriver) QueryApproveCC(ccId string) error {
+func (driver *FabricSDKDriver) QueryApprovedCC(ccId string, channelId, orgId, peerEndpoint string, sequence int64) error {
+	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
+	resMgmtClient, err := resmgmt.New(clientContext)
+	if err != nil {
+		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
+	}
+
+	queryApprovedCCReq := resmgmt.LifecycleQueryApprovedCCRequest{
+		Name:     ccId,
+		Sequence: sequence,
+	}
+
+	_, err = resMgmtClient.LifecycleQueryApprovedCC(channelId, queryApprovedCCReq, resmgmt.WithTargetEndpoints(peerEndpoint),
+		resmgmt.WithRetry(retry.DefaultResMgmtOpts))
+	if err != nil {
+		return errors.Wrap(err, "query approved chaincode failed")
+	}
 	return nil
 }
 
-func (driver *FabricSDKDriver) CommitCC() error {
-	// ccPolicy := policydsl.SignedByAnyMember([]string{"Org1MSP"})
-	// req := resmgmt.LifecycleCommitCCRequest{
-	// 	Name:              ccID,
-	// 	Version:           "0",
-	// 	Sequence:          1,
-	// 	EndorsementPlugin: "escc",
-	// 	ValidationPlugin:  "vscc",
-	// 	SignaturePolicy:   ccPolicy,
-	// 	InitRequired:      true,
-	// }
-	// txnID, err := orgResMgmt.LifecycleCommitCC(channelID, req, resmgmt.WithRetry(retry.DefaultResMgmtOpts), resmgmt.WithTargetEndpoints(peer1), resmgmt.WithOrdererEndpoint("orderer.example.com"))
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-	// require.NotEmpty(t, txnID)
+func (driver *FabricSDKDriver) CommitCC(ccId, ccVersion, ccPolicy, channelId, orgId, peerEndpoint, ordererEndpoint, packageId string, sequence int64, initRequired bool) error {
+	policy, err := policydsl.FromString(ccPolicy)
+	req := resmgmt.LifecycleCommitCCRequest{
+		Name:              ccId,
+		Version:           ccVersion,
+		Sequence:          sequence,
+		EndorsementPlugin: "escc",
+		ValidationPlugin:  "vscc",
+		SignaturePolicy:   policy,
+		InitRequired:      initRequired,
+	}
+	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
+	resMgmtClient, err := resmgmt.New(clientContext)
+	if err != nil {
+		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
+	}
+	txID, err := resMgmtClient.LifecycleCommitCC(channelId, req, resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+		resmgmt.WithTargetEndpoints(peerEndpoint), resmgmt.WithOrdererEndpoint(ordererEndpoint))
+	if err != nil {
+		return errors.Wrap(err, "commit chaincode failed")
+	}
+	logger.Infof("commit chaincode %s success, txId=%s", ccId, txID)
 	return nil
 }
 
-func (driver *FabricSDKDriver) QueryCommittedCC() error {
-
+func (driver *FabricSDKDriver) QueryCommittedCC(ccId, channelId, orgId, peerEndpoint string) error {
+	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
+	resMgmtClient, err := resmgmt.New(clientContext)
+	if err != nil {
+		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
+	}
+	req := resmgmt.LifecycleQueryCommittedCCRequest{
+		Name: ccId,
+	}
+	_, err = resMgmtClient.LifecycleQueryCommittedCC(channelId, req, resmgmt.WithTargetEndpoints(peerEndpoint),
+		resmgmt.WithRetry(retry.DefaultResMgmtOpts))
+	if err != nil {
+		return errors.Wrap(err, "query committed chaincode failed")
+	}
 	return nil
 }
 
-func (driver *FabricSDKDriver) InitCC() error {
+func (driver *FabricSDKDriver) InitCC(ccId, channelId, orgId string, args []string) error {
+	clientChannelContext := driver.fabSDK.ChannelContext(channelId, fabsdk.WithUser("User1"), fabsdk.WithOrg(orgId))
+	client, err := channel.New(clientChannelContext)
+	if err != nil {
+		return errors.Wrap(err, "Failed to create new channel client")
+	}
+	resp, err := client.Execute(channel.Request{ChaincodeID: ccId, Fcn: "init", Args: parseCCArgs(args), IsInit: true},
+		channel.WithRetry(retry.DefaultChannelOpts))
+	if err != nil {
+		return errors.Wrap(err, "init chaincode failed")
+	}
+	logger.Infof("init chaincode %s success, txid=%s", ccId, resp)
 	return nil
 }
