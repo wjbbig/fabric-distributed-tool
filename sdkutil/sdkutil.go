@@ -2,17 +2,21 @@ package sdkutil
 
 import (
 	"fmt"
+	"path/filepath"
+
+	pb "github.com/hyperledger/fabric-protos-go/peer"
 	mspclient "github.com/hyperledger/fabric-sdk-go/pkg/client/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/resmgmt"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/errors/retry"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/core/config"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fab/ccpackager/gopackager"
+	lcpackager "github.com/hyperledger/fabric-sdk-go/pkg/fab/ccpackager/lifecycle"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/common/policydsl"
 	"github.com/pkg/errors"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
-	"path/filepath"
+	"github.com/wjbbig/fabric-distributed-tool/utils"
 )
 
 var logger = mylogger.NewLogger()
@@ -174,4 +178,111 @@ func parseCCArgs(args []string) [][]byte {
 		argBytes = append(argBytes, []byte(arg))
 	}
 	return argBytes
+}
+
+//================================v2.0====================================
+
+func (driver *FabricSDKDriver) PackageCC(ccId, ccPath, outputPath string) (string, []byte, error) {
+	desc := &lcpackager.Descriptor{
+		Type:  pb.ChaincodeSpec_GOLANG,
+		Path:  ccPath,
+		Label: ccId,
+	}
+	ccPkg, err := lcpackager.NewCCPackage(desc)
+	if err != nil {
+		return "", nil, errors.Wrap(err, "error packaging chaincode")
+	}
+	if err := utils.WriteFile(outputPath, ccPkg, 0755); err != nil {
+		return "", nil, errors.Wrap(err, "error writing chaincode")
+	}
+	return desc.Label, ccPkg, nil
+}
+
+// InstallCCV2 uses to install chaincode for fabric v2.0
+func (driver *FabricSDKDriver) InstallCCV2(ccId, channelId, orgId, peerEndpoint string, ccPkg []byte) error {
+	installCCReq := resmgmt.LifecycleInstallCCRequest{
+		Label:   ccId,
+		Package: ccPkg,
+	}
+	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
+	resMgmtClient, err := resmgmt.New(clientContext)
+	if err != nil {
+		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
+	}
+	packageId := lcpackager.ComputePackageID(ccId, ccPkg)
+	resp, err := resMgmtClient.LifecycleInstallCC(installCCReq, resmgmt.WithRetry(retry.DefaultResMgmtOpts))
+	if err != nil {
+		return errors.Wrap(err, "install chaincode failed")
+	}
+	if resp[0].PackageID != packageId {
+		return errors.Wrap(err, "packageId from install response is not equal to the id from computed")
+	}
+
+	return nil
+}
+
+func (driver *FabricSDKDriver) QueryInstalled(ccId, channelId, orgId, peerEndpoint, packageId string) error {
+	return nil
+}
+
+func (driver *FabricSDKDriver) ApproveCC(ccId, ccVersion, ccPolicy, channelId, orgId, peerEndpoint, ordererEndpoint, packageId string) error {
+	policy, err := policydsl.FromString(ccPolicy)
+	if err != nil {
+		return errors.Wrap(err, "build ccPolicy failed")
+	}
+	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
+	resMgmtClient, err := resmgmt.New(clientContext)
+	if err != nil {
+		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
+	}
+	approveCCReq := resmgmt.LifecycleApproveCCRequest{
+		Name:      ccId,
+		Version:   ccVersion,
+		PackageID: packageId,
+		// TODO: sequence
+		Sequence:          1,
+		EndorsementPlugin: "escc",
+		ValidationPlugin:  "vscc",
+		SignaturePolicy:   policy,
+	}
+
+	txId, err := resMgmtClient.LifecycleApproveCC(channelId, approveCCReq, resmgmt.WithTargetEndpoints(peerEndpoint),
+		resmgmt.WithOrdererEndpoint(ordererEndpoint), resmgmt.WithRetry(retry.DefaultResMgmtOpts))
+	if err != nil {
+		return errors.Wrap(err, "approve chaincode failed")
+	}
+	logger.Infof("approve chaincode %s success for org %s, txId=%s", ccId, orgId, txId)
+	return nil
+}
+
+func (driver *FabricSDKDriver) QueryApproveCC(ccId string) error {
+	return nil
+}
+
+func (driver *FabricSDKDriver) CommitCC() error {
+	// ccPolicy := policydsl.SignedByAnyMember([]string{"Org1MSP"})
+	// req := resmgmt.LifecycleCommitCCRequest{
+	// 	Name:              ccID,
+	// 	Version:           "0",
+	// 	Sequence:          1,
+	// 	EndorsementPlugin: "escc",
+	// 	ValidationPlugin:  "vscc",
+	// 	SignaturePolicy:   ccPolicy,
+	// 	InitRequired:      true,
+	// }
+	// txnID, err := orgResMgmt.LifecycleCommitCC(channelID, req, resmgmt.WithRetry(retry.DefaultResMgmtOpts), resmgmt.WithTargetEndpoints(peer1), resmgmt.WithOrdererEndpoint("orderer.example.com"))
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// require.NotEmpty(t, txnID)
+	return nil
+}
+
+func (driver *FabricSDKDriver) QueryCommittedCC() error {
+
+	return nil
+}
+
+func (driver *FabricSDKDriver) InitCC() error {
+	return nil
 }
