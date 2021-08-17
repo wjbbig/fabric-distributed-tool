@@ -9,6 +9,8 @@ package genesisconfig
 import (
 	"encoding/json"
 	"fmt"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
 	"path/filepath"
 	"sync"
 	"time"
@@ -227,36 +229,16 @@ func LoadTopLevel(configPaths ...string) *TopLevel {
 // Load returns the orderer/application config combination that corresponds to
 // a given profile. Config paths may optionally be provided and will be used
 // in place of the FABRIC_CFG_PATH env variable.
-func Load(profile string, configPaths ...string) *Profile {
-	config := viper.New()
-	if len(configPaths) > 0 {
-		for _, p := range configPaths {
-			config.AddConfigPath(p)
-		}
-		config.SetConfigName("configtx")
-	} else {
-		cf.InitViper(config, "configtx")
-	}
-
-	err := config.ReadInConfig()
-	if err != nil {
-		logger.Panicf("Error reading configuration: %s", err)
-	}
-	logger.Debugf("Using config file: %s", config.ConfigFileUsed())
-
-	uconf, err := cache.load(config, config.ConfigFileUsed())
-	if err != nil {
-		logger.Panicf("Error loading config from config cache: %s", err)
-	}
-
+func Load(profile string, configPath string) *Profile {
+	uconf := &TopLevel{}
+	data, _ := ioutil.ReadFile(filepath.Join(configPath, "configtx.yaml"))
+	yaml.Unmarshal(data, uconf)
 	result, ok := uconf.Profiles[profile]
 	if !ok {
 		logger.Panicf("Could not find profile: %s", profile)
 	}
 
-	result.completeInitialization(filepath.Dir(config.ConfigFileUsed()))
-
-	logger.Infof("Loaded configuration: %s", config.ConfigFileUsed())
+	result.completeInitialization(configPath)
 
 	return result
 }
@@ -312,26 +294,20 @@ loop:
 	for {
 		switch {
 		case ord.OrdererType == "":
-			logger.Infof("Orderer.OrdererType unset, setting to %v", genesisDefaults.Orderer.OrdererType)
 			ord.OrdererType = genesisDefaults.Orderer.OrdererType
 		case ord.BatchTimeout == 0:
-			logger.Infof("Orderer.BatchTimeout unset, setting to %s", genesisDefaults.Orderer.BatchTimeout)
 			ord.BatchTimeout = genesisDefaults.Orderer.BatchTimeout
 		case ord.BatchSize.MaxMessageCount == 0:
-			logger.Infof("Orderer.BatchSize.MaxMessageCount unset, setting to %v", genesisDefaults.Orderer.BatchSize.MaxMessageCount)
 			ord.BatchSize.MaxMessageCount = genesisDefaults.Orderer.BatchSize.MaxMessageCount
 		case ord.BatchSize.AbsoluteMaxBytes == 0:
-			logger.Infof("Orderer.BatchSize.AbsoluteMaxBytes unset, setting to %v", genesisDefaults.Orderer.BatchSize.AbsoluteMaxBytes)
 			ord.BatchSize.AbsoluteMaxBytes = genesisDefaults.Orderer.BatchSize.AbsoluteMaxBytes
 		case ord.BatchSize.PreferredMaxBytes == 0:
-			logger.Infof("Orderer.BatchSize.PreferredMaxBytes unset, setting to %v", genesisDefaults.Orderer.BatchSize.PreferredMaxBytes)
 			ord.BatchSize.PreferredMaxBytes = genesisDefaults.Orderer.BatchSize.PreferredMaxBytes
 		default:
 			break loop
 		}
 	}
 
-	logger.Infof("orderer type: %s", ord.OrdererType)
 	// Additional, consensus type-dependent initialization goes here
 	// Also using this to panic on unknown orderer type.
 	switch ord.OrdererType {

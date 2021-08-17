@@ -13,7 +13,6 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	fconfigtx "github.com/hyperledger/fabric-config/configtx"
@@ -650,7 +649,7 @@ func GenerateGenesisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId str
 	}
 
 	logger.Infof("begin to generate fabric genesis.block, genesis channel name is %s", defaultGenesisChannel)
-	profileConfig := genesisconfig.Load(strings.ToLower(defaultGenesisName), fileDir)
+	profileConfig := genesisconfig.Load(defaultGenesisName, fileDir)
 	outputBlockPath := filepath.Join(channelArtifactsPath, "genesis.block")
 	if err := doOutputBlock(profileConfig, defaultGenesisChannel, outputBlockPath); err != nil {
 		return err
@@ -658,7 +657,7 @@ func GenerateGenesisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId str
 
 	// generate channel transaction
 	logger.Infof("begin to generate channel.tx, channel=%s", channelId)
-	profileConfig = genesisconfig.Load(strings.ToLower(defaultChannelProfileName), fileDir)
+	profileConfig = genesisconfig.Load(defaultChannelProfileName, fileDir)
 	outputChannelCreateTxPath := filepath.Join(channelArtifactsPath, fmt.Sprintf("%s.tx", channelId))
 	if err := doOutputChannelCreateTx(profileConfig, channelId, outputChannelCreateTxPath); err != nil {
 		return err
@@ -676,7 +675,7 @@ func GenerateGenesisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId str
 	// generate anchor peer transaction
 	for org := range peerOrgs {
 		logger.Infof("begin to generate anchors.tx, org=%s", org)
-		profileConfig = genesisconfig.Load(strings.ToLower(defaultChannelProfileName), fileDir)
+		profileConfig = genesisconfig.Load(defaultChannelProfileName, fileDir)
 		outputAnchorPeersUpdatePath := filepath.Join(channelArtifactsPath, fmt.Sprintf("%sanchors.tx", org))
 		if err := doOutputAnchorPeersUpdate(profileConfig, channelId, outputAnchorPeersUpdatePath, org); err != nil {
 			return err
@@ -756,8 +755,6 @@ func doOutputAnchorPeersUpdate(conf *genesisconfig.Profile, channelId, outputAnc
 	if err != nil {
 		return errors.WithMessage(err, "could not create signed envelope")
 	}
-
-	logger.Info("Writing anchor peer update")
 	err = utils.WriteFile(outputAnchorPeersUpdate, protoutil.MarshalOrPanic(updateTx), 0640)
 	if err != nil {
 		return fmt.Errorf("Error writing channel anchor peer update: %s", err)
