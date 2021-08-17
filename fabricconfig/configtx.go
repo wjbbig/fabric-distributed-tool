@@ -2,10 +2,18 @@ package fabricconfig
 
 import (
 	"fmt"
+	"github.com/golang/protobuf/proto"
+	cb "github.com/hyperledger/fabric-protos-go/common"
+	"github.com/hyperledger/fabric/common/channelconfig"
+	"github.com/hyperledger/fabric/protoutil"
+	"github.com/wjbbig/fabric-distributed-tool/tools/configtxgen/encoder"
+	"github.com/wjbbig/fabric-distributed-tool/tools/configtxgen/genesisconfig"
+	"github.com/wjbbig/fabric-distributed-tool/tools/configtxlator/update"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	fconfigtx "github.com/hyperledger/fabric-config/configtx"
@@ -573,37 +581,86 @@ func GenerateLocallyTestNetworkConfigtx(filePath string) error {
 	return ioutil.WriteFile(path, data, 0755)
 }
 
-func GenerateGensisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId string, nc *network.NetworkConfig) error {
+//func GenerateGensisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId string, nc *network.NetworkConfig) error {
+//	// generate genesis.block
+//	configtxgenPath := filepath.Join("tools", "configtxgen")
+//	channelArtifactsPath := filepath.Join(fileDir, "channel-artifacts")
+//	if err := os.MkdirAll(channelArtifactsPath, 0755); err != nil {
+//		return errors.Wrapf(err, "failed to create directory, path=%s", channelArtifactsPath)
+//	}
+//
+//	logger.Infof("begin to generate fabric genesis.block, genesis channel name is %s", defaultGenesisChannel)
+//	var args []string
+//	// ./configtxgen -profile TwoOrgsOrdererGenesis -channelID byfn-sys-channel -outputBlock ./channel-artifacts/genesis.block
+//	args = []string{
+//		fmt.Sprintf("--configPath=%s", fileDir),
+//		fmt.Sprintf("--profile=%s", defaultGenesisName),
+//		fmt.Sprintf("--channelID=%s", defaultGenesisChannel),
+//		fmt.Sprintf("--outputBlock=%s", filepath.Join(channelArtifactsPath, "genesis.block")),
+//	}
+//	if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
+//		return err
+//	}
+//
+//	// generate channel transaction
+//	// ./bin/configtxgen -profile TwoOrgsChannel -outputCreateChannelTx ./channel-artifacts/channel.tx -channelID $CHANNEL_NAME
+//	logger.Infof("begin to generate channel.tx, channel=%s", channelId)
+//	args = []string{
+//		fmt.Sprintf("--configPath=%s", fileDir),
+//		fmt.Sprintf("--profile=%s", defaultChannelProfileName),
+//		fmt.Sprintf("--channelID=%s", channelId),
+//		fmt.Sprintf("--outputCreateChannelTx=%s", filepath.Join(channelArtifactsPath, fmt.Sprintf("%s.tx", channelId))),
+//	}
+//	if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
+//		return err
+//	}
+//
+//	peerNodes, _, err := nc.GetNodesByChannel(channelId)
+//	if err != nil {
+//		return nil
+//	}
+//	peerOrgs := make(map[string]interface{})
+//	for _, node := range peerNodes {
+//		peerOrgs[node.OrgId] = nil
+//	}
+//	// TODO: does fabric2.x need this step???
+//	// generate anchor peer transaction
+//	// ./bin/configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate ./channel-artifacts/Org1anchors.tx -channelID $CHANNEL_NAME -asOrg Org1MSP
+//	for org := range peerOrgs {
+//		logger.Infof("begin to generate anchors.tx, org=%s", org)
+//		args = []string{
+//			fmt.Sprintf("--configPath=%s", fileDir),
+//			fmt.Sprintf("--profile=%s", defaultChannelProfileName),
+//			fmt.Sprintf("--channelID=%s", channelId),
+//			fmt.Sprintf("--outputAnchorPeersUpdate=%s", filepath.Join(channelArtifactsPath, fmt.Sprintf("%sanchors.tx", org))),
+//			fmt.Sprintf("--asOrg=%s", org),
+//		}
+//		if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
+//			return err
+//		}
+//	}
+//	return nil
+//}
+
+func GenerateGenesisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId string, nc *network.NetworkConfig) error {
 	// generate genesis.block
-	configtxgenPath := filepath.Join("tools", "configtxgen")
 	channelArtifactsPath := filepath.Join(fileDir, "channel-artifacts")
 	if err := os.MkdirAll(channelArtifactsPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create directory, path=%s", channelArtifactsPath)
 	}
 
 	logger.Infof("begin to generate fabric genesis.block, genesis channel name is %s", defaultGenesisChannel)
-	var args []string
-	// ./configtxgen -profile TwoOrgsOrdererGenesis -channelID byfn-sys-channel -outputBlock ./channel-artifacts/genesis.block
-	args = []string{
-		fmt.Sprintf("--configPath=%s", fileDir),
-		fmt.Sprintf("--profile=%s", defaultGenesisName),
-		fmt.Sprintf("--channelID=%s", defaultGenesisChannel),
-		fmt.Sprintf("--outputBlock=%s", filepath.Join(channelArtifactsPath, "genesis.block")),
-	}
-	if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
+	profileConfig := genesisconfig.Load(strings.ToLower(defaultGenesisName), fileDir)
+	outputBlockPath := filepath.Join(channelArtifactsPath, "genesis.block")
+	if err := doOutputBlock(profileConfig, defaultGenesisChannel, outputBlockPath); err != nil {
 		return err
 	}
 
 	// generate channel transaction
-	// ./bin/configtxgen -profile TwoOrgsChannel -outputCreateChannelTx ./channel-artifacts/channel.tx -channelID $CHANNEL_NAME
 	logger.Infof("begin to generate channel.tx, channel=%s", channelId)
-	args = []string{
-		fmt.Sprintf("--configPath=%s", fileDir),
-		fmt.Sprintf("--profile=%s", defaultChannelProfileName),
-		fmt.Sprintf("--channelID=%s", channelId),
-		fmt.Sprintf("--outputCreateChannelTx=%s", filepath.Join(channelArtifactsPath, fmt.Sprintf("%s.tx", channelId))),
-	}
-	if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
+	profileConfig = genesisconfig.Load(strings.ToLower(defaultChannelProfileName), fileDir)
+	outputChannelCreateTxPath := filepath.Join(channelArtifactsPath, fmt.Sprintf("%s.tx", channelId))
+	if err := doOutputChannelCreateTx(profileConfig, channelId, outputChannelCreateTxPath); err != nil {
 		return err
 	}
 
@@ -617,19 +674,93 @@ func GenerateGensisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId stri
 	}
 	// TODO: does fabric2.x need this step???
 	// generate anchor peer transaction
-	// ./bin/configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate ./channel-artifacts/Org1anchors.tx -channelID $CHANNEL_NAME -asOrg Org1MSP
-	for org, _ := range peerOrgs {
+	for org := range peerOrgs {
 		logger.Infof("begin to generate anchors.tx, org=%s", org)
-		args = []string{
-			fmt.Sprintf("--configPath=%s", fileDir),
-			fmt.Sprintf("--profile=%s", defaultChannelProfileName),
-			fmt.Sprintf("--channelID=%s", channelId),
-			fmt.Sprintf("--outputAnchorPeersUpdate=%s", filepath.Join(channelArtifactsPath, fmt.Sprintf("%sanchors.tx", org))),
-			fmt.Sprintf("--asOrg=%s", org),
-		}
-		if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
+		profileConfig = genesisconfig.Load(strings.ToLower(defaultChannelProfileName), fileDir)
+		outputAnchorPeersUpdatePath := filepath.Join(channelArtifactsPath, fmt.Sprintf("%sanchors.tx", org))
+		if err := doOutputAnchorPeersUpdate(profileConfig, channelId, outputAnchorPeersUpdatePath, org); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func doOutputBlock(config *genesisconfig.Profile, channelId string, outputBlock string) error {
+	pgen, err := encoder.NewBootstrapper(config)
+	if err != nil {
+		return errors.Wrap(err, "could not create bootstrapper")
+	}
+	if config.Orderer == nil {
+		return errors.Errorf("refusing to generate block which is missing orderer section")
+	}
+	if config.Consortiums == nil {
+		logger.Warn("genesis block does not contain a consortiums group definition.  This block cannot be used for orderer bootstrap")
+	}
+	genesisBlock := pgen.GenesisBlockForChannel(channelId)
+	if err := utils.WriteFile(outputBlock, protoutil.MarshalOrPanic(genesisBlock), 0640); err != nil {
+		return fmt.Errorf("error writing genesis block: %s", err)
+	}
+	return nil
+}
+
+func doOutputChannelCreateTx(conf *genesisconfig.Profile, channelId string, outputChannelCreateTx string) error {
+	configtx, err := encoder.MakeChannelCreationTransaction(channelId, nil, conf)
+	if err != nil {
+		return err
+	}
+	if err := utils.WriteFile(outputChannelCreateTx, protoutil.MarshalOrPanic(configtx), 0640); err != nil {
+		return fmt.Errorf("error writing channel create tx: %s", err)
+	}
+	return nil
+}
+
+func doOutputAnchorPeersUpdate(conf *genesisconfig.Profile, channelId, outputAnchorPeersUpdate, asOrg string) error {
+	if asOrg == "" {
+		return fmt.Errorf("must specify an organization to update the anchor peer for")
+	}
+
+	if conf.Application == nil {
+		return fmt.Errorf("cannot update anchor peers without an application section")
+	}
+
+	original, err := encoder.NewChannelGroup(conf)
+	if err != nil {
+		return errors.WithMessage(err, "error parsing profile as channel group")
+	}
+	original.Groups[channelconfig.ApplicationGroupKey].Version = 1
+
+	updated := proto.Clone(original).(*cb.ConfigGroup)
+
+	originalOrg, ok := original.Groups[channelconfig.ApplicationGroupKey].Groups[asOrg]
+	if !ok {
+		return errors.Errorf("org with name '%s' does not exist in config", asOrg)
+	}
+
+	if _, ok = originalOrg.Values[channelconfig.AnchorPeersKey]; !ok {
+		return errors.Errorf("org '%s' does not have any anchor peers defined", asOrg)
+	}
+
+	delete(originalOrg.Values, channelconfig.AnchorPeersKey)
+
+	updt, err := update.Compute(&cb.Config{ChannelGroup: original}, &cb.Config{ChannelGroup: updated})
+	if err != nil {
+		return errors.WithMessage(err, "could not compute update")
+	}
+	updt.ChannelId = channelId
+
+	newConfigUpdateEnv := &cb.ConfigUpdateEnvelope{
+		ConfigUpdate: protoutil.MarshalOrPanic(updt),
+	}
+
+	updateTx, err := protoutil.CreateSignedEnvelope(cb.HeaderType_CONFIG_UPDATE, channelId, nil, newConfigUpdateEnv, 0, 0)
+	if err != nil {
+		return errors.WithMessage(err, "could not create signed envelope")
+	}
+
+	logger.Info("Writing anchor peer update")
+	err = utils.WriteFile(outputAnchorPeersUpdate, protoutil.MarshalOrPanic(updateTx), 0640)
+	if err != nil {
+		return fmt.Errorf("Error writing channel anchor peer update: %s", err)
 	}
 	return nil
 }

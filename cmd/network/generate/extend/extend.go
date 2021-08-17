@@ -35,13 +35,9 @@ var extendCmd = &cobra.Command{
 	Short: "extend peer or orderer node.",
 	Long:  "extend peer or orderer node.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// update sshconfig
-
-		// update crypto-config
-
-		// update docker-compose
-
-		// update connectionfile
+		if dataDir == "" {
+			logger.Error("datadir is not specified")
+		}
 
 		return nil
 	},

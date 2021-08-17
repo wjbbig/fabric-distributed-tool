@@ -335,7 +335,7 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 		ccPolicy = nc.Chaincodes[channel.Chaincodes[0]].Policy
 		ccId = channel.Chaincodes[0]
 	}
-	if err := fabricconfig.GenerateGensisBlockAndChannelTxAndAnchorPeer(dataDir, channelId, nc); err != nil {
+	if err := fabricconfig.GenerateGenesisBlockAndChannelTxAndAnchorPeer(dataDir, channelId, nc); err != nil {
 		return err
 	}
 	sshUtil, err := ReadSSHConfigFromNetwork(nc)

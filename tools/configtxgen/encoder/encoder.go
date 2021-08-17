@@ -7,11 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package encoder
 
 import (
+	"fmt"
 	"github.com/golang/protobuf/proto"
 	cb "github.com/hyperledger/fabric-protos-go/common"
 	pb "github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric/common/channelconfig"
-	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/genesis"
 	"github.com/hyperledger/fabric/common/policies"
 	"github.com/hyperledger/fabric/common/policydsl"
@@ -30,8 +30,6 @@ const (
 	msgVersion = int32(0)
 	epoch      = 0
 )
-
-var logger = flogging.MustGetLogger("common.tools.configtxgen.encoder")
 
 const (
 	// ConsensusTypeSolo identifies the solo consensus implementation.
@@ -606,7 +604,7 @@ func NewBootstrapper(config *genesisconfig.Profile) (*Bootstrapper, error) {
 func New(config *genesisconfig.Profile) *Bootstrapper {
 	bs, err := NewBootstrapper(config)
 	if err != nil {
-		logger.Panicf("Error creating bootsrapper: %s", err)
+		panic(fmt.Errorf("Error creating bootsrapper: %s", err))
 	}
 	return bs
 }

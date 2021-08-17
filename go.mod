@@ -23,3 +23,5 @@ require (
 	golang.org/x/crypto v0.0.0-20210616213533-5ff15b29337e
 	gopkg.in/yaml.v2 v2.4.0
 )
+
+replace github.com/mitchellh/mapstructure v1.4.1 => github.com/mitchellh/mapstructure v1.3.3
