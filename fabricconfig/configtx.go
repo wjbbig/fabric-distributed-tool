@@ -115,7 +115,7 @@ type ConfigtxApplication struct {
 	Capabilities  map[string]bool           `yaml:"Capabilities,omitempty"`
 }
 
-// orderPeerOrdererByOrg 将相同组织的节点整理在一起
+// orderPeerOrdererByOrg organizes nodes of the same organization together
 func orderPeerOrdererByOrg(nodes []*network.Node) map[string][]*network.Node {
 	orderedUrl := make(map[string][]*network.Node)
 	for _, node := range nodes {
@@ -132,19 +132,18 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 	var ordererOrganizations []ConfigtxOrganization
 	ordererOrgsPath := filepath.Join(filePath, "crypto-config", "ordererOrganizations")
 	ordererMap := orderPeerOrdererByOrg(orderers)
-	// TODO raft错误
 	var ordererAddresses []string
 	for _, ordererNodes := range ordererMap {
 		for _, node := range ordererNodes {
 			serverCertPath := filepath.Join(ordererOrgsPath, node.Domain, "orderers", node.GetHostname(), "tls/server.crt")
 			consenter := ConfigtxConsenter{
 				Host:          node.GetHostname(),
-				Port:          uint32(node.NodePort),
+				Port:          7050,
 				ClientTLSCert: serverCertPath,
 				ServerTLSCert: serverCertPath,
 			}
 			consenters = append(consenters, consenter)
-			ordererAddresses = append(ordererAddresses, fmt.Sprintf("%s:%d", node.GetHostname(), node.NodePort))
+			ordererAddresses = append(ordererAddresses, fmt.Sprintf("%s:7050", node.GetHostname()))
 		}
 		ordererNode := ordererNodes[0]
 
@@ -273,7 +272,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 		configtx.Profiles = map[string]ConfigtxProfile{
 			defaultGenesisName: {
 				Orderer:     orderer,
-				Application: application,
+				Application: ordererApplication,
 				Capabilities: map[string]bool{
 					"V1_4_3": true,
 					"V1_3":   false,
@@ -364,9 +363,10 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 	return ioutil.WriteFile(path, data, 0755)
 }
 
-func GenerateGensisBlockAndChannelTxAndAnchorPeerUsingBinary(fileDir string, channelId string, nc *network.NetworkConfig) error {
+// GenerateGenesisBlockAndChannelTxAndAnchorPeerUsingBinary generates files using configtxgen
+func GenerateGenesisBlockAndChannelTxAndAnchorPeerUsingBinary(fileDir string, channelId string, nc *network.NetworkConfig) error {
 	// generate genesis.block
-	configtxgenPath := filepath.Join("tools", "configtxgen")
+	configtxgenPath := filepath.Join("/home/wjbbig/workspace/go/src/github.com/hyperledger/fabric-samples/bin", "configtxgen")
 	channelArtifactsPath := filepath.Join(fileDir, "channel-artifacts")
 	if err := os.MkdirAll(channelArtifactsPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create directory, path=%s", channelArtifactsPath)
