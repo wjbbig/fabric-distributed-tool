@@ -179,6 +179,7 @@ func TransferFilesByPeerName(sshUtil *sshutil.SSHUtil, dataDir string) error {
 }
 
 func StartupNetwork(sshUtil *sshutil.SSHUtil, dataDir string) error {
+	logger.Info("begin to start network")
 	for name, client := range sshUtil.Clients() {
 		var dockerComposeFilePath string
 		if client.NeedCouch && client.NodeType == network.PeerNode {
@@ -195,6 +196,7 @@ func StartupNetwork(sshUtil *sshutil.SSHUtil, dataDir string) error {
 		}
 		// TODO start ca if chosen
 	}
+	logger.Info("starting network complete!")
 	return nil
 }
 
@@ -290,6 +292,7 @@ func InstantiateCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId
 }
 
 // ==========================cmd=========================
+
 func DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, ifCouchdb bool, peerUrls, ordererUrls []string) error {
 	networkConfig, err := GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy, ccInitRequired, sequence, ifCouchdb, peerUrls, ordererUrls)
 	if err != nil {

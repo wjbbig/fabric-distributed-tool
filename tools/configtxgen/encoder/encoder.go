@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/golang/protobuf/proto"
 	cb "github.com/hyperledger/fabric-protos-go/common"
+	"github.com/hyperledger/fabric-protos-go/orderer/etcdraft"
 	pb "github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric/common/channelconfig"
 	"github.com/hyperledger/fabric/common/genesis"
@@ -201,7 +202,24 @@ func NewOrdererGroup(conf *genesisconfig.Orderer) (*cb.ConfigGroup, error) {
 	case ConsensusTypeKafka:
 		addValue(ordererGroup, channelconfig.KafkaBrokersValue(conf.Kafka.Brokers), channelconfig.AdminsPolicyKey)
 	case ConsensusTypeEtcdRaft:
-		if consensusMetadata, err = channelconfig.MarshalEtcdRaftMetadata(conf.EtcdRaft); err != nil {
+		metadata := &etcdraft.ConfigMetadata{}
+		metadata.Options = &etcdraft.Options{
+			TickInterval:         conf.EtcdRaft.Options.TickInterval,
+			ElectionTick:         conf.EtcdRaft.Options.ElectionTick,
+			HeartbeatTick:        conf.EtcdRaft.Options.HeartbeatTick,
+			MaxInflightBlocks:    conf.EtcdRaft.Options.MaxInflightBlocks,
+			SnapshotIntervalSize: conf.EtcdRaft.Options.SnapshotIntervalSize,
+		}
+		for _, consenter := range conf.EtcdRaft.Consenters {
+			raftConsenter := &etcdraft.Consenter{
+				Host:          consenter.Host,
+				Port:          consenter.Port,
+				ClientTlsCert: []byte(consenter.ClientTLSCert),
+				ServerTlsCert: []byte(consenter.ServerTLSCert),
+			}
+			metadata.Consenters = append(metadata.Consenters, raftConsenter)
+		}
+		if consensusMetadata, err = channelconfig.MarshalEtcdRaftMetadata(metadata); err != nil {
 			return nil, errors.Errorf("cannot marshal metadata for orderer type %s: %s", ConsensusTypeEtcdRaft, err)
 		}
 	default:

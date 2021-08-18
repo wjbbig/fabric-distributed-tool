@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hyperledger/fabric-protos-go/orderer/etcdraft"
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/viperutil"
 	cf "github.com/hyperledger/fabric/core/config"
@@ -145,16 +144,36 @@ type AnchorPeer struct {
 
 // Orderer contains configuration associated to a channel.
 type Orderer struct {
-	OrdererType   string                   `yaml:"OrdererType"`
-	Addresses     []string                 `yaml:"Addresses"`
-	BatchTimeout  time.Duration            `yaml:"BatchTimeout"`
-	BatchSize     BatchSize                `yaml:"BatchSize"`
-	Kafka         Kafka                    `yaml:"Kafka"`
-	EtcdRaft      *etcdraft.ConfigMetadata `yaml:"EtcdRaft"`
-	Organizations []*Organization          `yaml:"Organizations"`
-	MaxChannels   uint64                   `yaml:"MaxChannels"`
-	Capabilities  map[string]bool          `yaml:"Capabilities"`
-	Policies      map[string]*Policy       `yaml:"Policies"`
+	OrdererType   string             `yaml:"OrdererType"`
+	Addresses     []string           `yaml:"Addresses"`
+	BatchTimeout  time.Duration      `yaml:"BatchTimeout"`
+	BatchSize     BatchSize          `yaml:"BatchSize"`
+	Kafka         Kafka              `yaml:"Kafka"`
+	EtcdRaft      *ConfigtxEtcdRaft  `yaml:"EtcdRaft"`
+	Organizations []*Organization    `yaml:"Organizations"`
+	MaxChannels   uint64             `yaml:"MaxChannels"`
+	Capabilities  map[string]bool    `yaml:"Capabilities"`
+	Policies      map[string]*Policy `yaml:"Policies"`
+}
+
+type ConfigtxEtcdRaft struct {
+	Consenters []*ConfigtxConsenter `yaml:"Consenters,omitempty"`
+	Options    *EtcdRaftOptions     `yaml:"Options,omitempty"`
+}
+
+type EtcdRaftOptions struct {
+	TickInterval         string `yaml:"TickInterval,omitempty"`
+	ElectionTick         uint32 `yaml:"ElectionTick,omitempty"`
+	HeartbeatTick        uint32 `yaml:"HeartbeatTick,omitempty"`
+	MaxInflightBlocks    uint32 `yaml:"MaxInflightBlocks,omitempty"`
+	SnapshotIntervalSize uint32 `yaml:"SnapshotIntervalSize,omitempty"`
+}
+
+type ConfigtxConsenter struct {
+	Host          string `yaml:"Host,omitempty"`
+	Port          uint32 `yaml:"Port,omitempty"`
+	ClientTLSCert string `yaml:"ClientTLSCert,omitempty"`
+	ServerTLSCert string `yaml:"ServerTLSCert,omitempty"`
 }
 
 // BatchSize contains configuration affecting the size of batches.
@@ -181,8 +200,8 @@ var genesisDefaults = TopLevel{
 		Kafka: Kafka{
 			Brokers: []string{"127.0.0.1:9092"},
 		},
-		EtcdRaft: &etcdraft.ConfigMetadata{
-			Options: &etcdraft.Options{
+		EtcdRaft: &ConfigtxEtcdRaft{
+			Options: &EtcdRaftOptions{
 				TickInterval:         "500ms",
 				ElectionTick:         10,
 				HeartbeatTick:        1,
@@ -191,39 +210,6 @@ var genesisDefaults = TopLevel{
 			},
 		},
 	},
-}
-
-// LoadTopLevel simply loads the configtx.yaml file into the structs above and
-// completes their initialization. Config paths may optionally be provided and
-// will be used in place of the FABRIC_CFG_PATH env variable.
-//
-// Note, for environment overrides to work properly within a profile, Load
-// should be used instead.
-func LoadTopLevel(configPaths ...string) *TopLevel {
-	config := viper.New()
-	if len(configPaths) > 0 {
-		for _, p := range configPaths {
-			config.AddConfigPath(p)
-		}
-		config.SetConfigName("configtx")
-	} else {
-		cf.InitViper(config, "configtx")
-	}
-
-	err := config.ReadInConfig()
-	if err != nil {
-		logger.Panicf("Error reading configuration: %s", err)
-	}
-	logger.Debugf("Using config file: %s", config.ConfigFileUsed())
-
-	uconf, err := cache.load(config, config.ConfigFileUsed())
-	if err != nil {
-		logger.Panicf("failed to load configCache: %s", err)
-	}
-	uconf.completeInitialization(filepath.Dir(config.ConfigFileUsed()))
-	logger.Infof("Loaded configuration: %s", config.ConfigFileUsed())
-
-	return uconf
 }
 
 // Load returns the orderer/application config combination that corresponds to
@@ -366,25 +352,19 @@ loop:
 			logger.Panicf("election tick must be greater than heartbeat tick")
 		}
 
-		for _, c := range ord.EtcdRaft.GetConsenters() {
+		for _, c := range ord.EtcdRaft.Consenters {
 			if c.Host == "" {
 				logger.Panicf("consenter info in %s configuration did not specify host", EtcdRaft)
 			}
 			if c.Port == 0 {
 				logger.Panicf("consenter info in %s configuration did not specify port", EtcdRaft)
 			}
-			if c.ClientTlsCert == nil {
+			if c.ClientTLSCert == "" {
 				logger.Panicf("consenter info in %s configuration did not specify client TLS cert", EtcdRaft)
 			}
-			if c.ServerTlsCert == nil {
+			if c.ServerTLSCert == "" {
 				logger.Panicf("consenter info in %s configuration did not specify server TLS cert", EtcdRaft)
 			}
-			clientCertPath := string(c.GetClientTlsCert())
-			cf.TranslatePathInPlace(configDir, &clientCertPath)
-			c.ClientTlsCert = []byte(clientCertPath)
-			serverCertPath := string(c.GetServerTlsCert())
-			cf.TranslatePathInPlace(configDir, &serverCertPath)
-			c.ServerTlsCert = []byte(serverCertPath)
 		}
 	default:
 		logger.Panicf("unknown orderer type: %s", ord.OrdererType)

@@ -63,6 +63,15 @@ type ConfigtxOrderer struct {
 
 type ConfigtxEtcdRaft struct {
 	Consenters []ConfigtxConsenter `yaml:"Consenters,omitempty"`
+	Options    EtcdRaftOptions     `yaml:"Options,omitempty"`
+}
+
+type EtcdRaftOptions struct {
+	TickInterval         string `yaml:"TickInterval,omitempty"`
+	ElectionTick         uint32 `yaml:"ElectionTick,omitempty"`
+	HeartbeatTick        uint32 `yaml:"HeartbeatTick,omitempty"`
+	MaxInflightBlocks    uint32 `yaml:"MaxInflightBlocks,omitempty"`
+	SnapshotIntervalSize uint32 `yaml:"SnapshotIntervalSize,omitempty"`
 }
 
 type ConfigtxConsenter struct {
@@ -123,6 +132,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 	var ordererOrganizations []ConfigtxOrganization
 	ordererOrgsPath := filepath.Join(filePath, "crypto-config", "ordererOrganizations")
 	ordererMap := orderPeerOrdererByOrg(orderers)
+	// TODO raft错误
 	var ordererAddresses []string
 	for _, ordererNodes := range ordererMap {
 		for _, node := range ordererNodes {
@@ -258,7 +268,8 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 
 	switch ordererType {
 	case ordererType_ETCDRAFT:
-		application.Organizations = ordererOrganizations
+		ordererApplication := application
+		ordererApplication.Organizations = ordererOrganizations
 		configtx.Profiles = map[string]ConfigtxProfile{
 			defaultGenesisName: {
 				Orderer:     orderer,
@@ -353,293 +364,65 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 	return ioutil.WriteFile(path, data, 0755)
 }
 
-// GenerateLocallyTestNetworkConfigtx 生成一个用于本地测试使用的configtx.yaml文件
-func GenerateLocallyTestNetworkConfigtx(filePath string) error {
-	var configtx Configtx
-	ordererOrg := ConfigtxOrganization{
-		Name:   "OrdererOrg",
-		ID:     "OrdererMSP",
-		MSPDir: "crypto-config/ordererOrganizations/example.com/msp",
-		Policies: map[string]ConfigtxPolicy{
-			"Readers": {
-				Type: "Signature",
-				Rule: "OR('OrdererMSP.member')",
-			},
-			"Writers": {
-				Type: "Signature",
-				Rule: "OR('OrdererMSP.member')",
-			},
-			"Admins": {
-				Type: "Signature",
-				Rule: "OR('OrdererMSP.admin')",
-			},
-		},
+func GenerateGensisBlockAndChannelTxAndAnchorPeerUsingBinary(fileDir string, channelId string, nc *network.NetworkConfig) error {
+	// generate genesis.block
+	configtxgenPath := filepath.Join("tools", "configtxgen")
+	channelArtifactsPath := filepath.Join(fileDir, "channel-artifacts")
+	if err := os.MkdirAll(channelArtifactsPath, 0755); err != nil {
+		return errors.Wrapf(err, "failed to create directory, path=%s", channelArtifactsPath)
 	}
 
-	org1 := ConfigtxOrganization{
-		Name:   "Org1MSP",
-		ID:     "Org1MSP",
-		MSPDir: "crypto-config/peerOrganizations/org1.example.com/msp",
-		Policies: map[string]ConfigtxPolicy{
-			"Readers": {
-				Type: "Signature",
-				Rule: "OR('Org1MSP.admin', 'Org1MSP.peer', 'Org1MSP.client')",
-			},
-			"Writers": {
-				Type: "Signature",
-				Rule: "OR('Org1MSP.admin', 'Org1MSP.client')",
-			},
-			"Admins": {
-				Type: "Signature",
-				Rule: "OR('Org1MSP.admin')",
-			},
-		},
-		AnchorPeers: []ConfigtxAnchorPeer{
-			{
-				Host: "peer0.org1.example.com",
-				Port: 7051,
-			},
-		},
+	logger.Infof("begin to generate fabric genesis.block, genesis channel name is %s", defaultGenesisChannel)
+	var args []string
+	// ./configtxgen -profile TwoOrgsOrdererGenesis -channelID byfn-sys-channel -outputBlock ./channel-artifacts/genesis.block
+	args = []string{
+		fmt.Sprintf("--configPath=%s", fileDir),
+		fmt.Sprintf("--profile=%s", defaultGenesisName),
+		fmt.Sprintf("--channelID=%s", defaultGenesisChannel),
+		fmt.Sprintf("--outputBlock=%s", filepath.Join(channelArtifactsPath, "genesis.block")),
 	}
-
-	org2 := ConfigtxOrganization{
-		Name:   "Org2MSP",
-		ID:     "Org2MSP",
-		MSPDir: "crypto-config/peerOrganizations/org2.example.com/msp",
-		Policies: map[string]ConfigtxPolicy{
-			"Readers": {
-				Type: "Signature",
-				Rule: "OR('Org2MSP.admin', 'Org2MSP.peer', 'Org2MSP.client')",
-			},
-			"Writers": {
-				Type: "Signature",
-				Rule: "OR('Org2MSP.admin', 'Org2MSP.client')",
-			},
-			"Admins": {
-				Type: "Signature",
-				Rule: "OR('Org2MSP.admin')",
-			},
-		},
-		AnchorPeers: []ConfigtxAnchorPeer{
-			{
-				Host: "peer0.org2.example.com",
-				Port: 9051,
-			},
-		},
-	}
-
-	twoOrgsOrdererGenesis := ConfigtxProfile{
-		Orderer: ConfigtxOrderer{
-			OrdererType:  "solo",
-			Addresses:    []string{"orderer.example.com:7050"},
-			BatchTimeout: "2s",
-			BatchSize: ConfigtxBatchSize{
-				MaxMessageCount:   10,
-				AbsoluteMaxBytes:  "99 MB",
-				PreferredMaxBytes: "512 KB",
-			},
-			Kafka: ConfigtxKafka{
-				Brokers: []string{"127.0.0.1:9092"},
-			},
-			EtcdRaft: ConfigtxEtcdRaft{
-				Consenters: []ConfigtxConsenter{
-					{
-						Host:          "orderer.example.com",
-						Port:          7050,
-						ClientTLSCert: "crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt",
-						ServerTLSCert: "crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt",
-					},
-					{
-						Host:          "orderer2.example.com",
-						Port:          7050,
-						ClientTLSCert: "crypto-config/ordererOrganizations/example.com/orderers/orderer2.example.com/tls/server.crt",
-						ServerTLSCert: "crypto-config/ordererOrganizations/example.com/orderers/orderer2.example.com/tls/server.crt",
-					},
-					{
-						Host:          "orderer3.example.com",
-						Port:          7050,
-						ClientTLSCert: "crypto-config/ordererOrganizations/example.com/orderers/orderer3.example.com/tls/server.crt",
-						ServerTLSCert: "crypto-config/ordererOrganizations/example.com/orderers/orderer3.example.com/tls/server.crt",
-					},
-					{
-						Host:          "orderer4.example.com",
-						Port:          7050,
-						ClientTLSCert: "crypto-config/ordererOrganizations/example.com/orderers/orderer4.example.com/tls/server.crt",
-						ServerTLSCert: "crypto-config/ordererOrganizations/example.com/orderers/orderer4.example.com/tls/server.crt",
-					},
-					{
-						Host:          "orderer5.example.com",
-						Port:          7050,
-						ClientTLSCert: "crypto-config/ordererOrganizations/example.com/orderers/orderer5.example.com/tls/server.crt",
-						ServerTLSCert: "crypto-config/ordererOrganizations/example.com/orderers/orderer5.example.com/tls/server.crt",
-					},
-				},
-			},
-			Policies: map[string]ConfigtxPolicy{
-				"Readers": {
-					Type: "ImplicitMeta",
-					Rule: "ANY Readers",
-				},
-				"Writers": {
-					Type: "ImplicitMeta",
-					Rule: "ANY Writers",
-				},
-				"Admins": {
-					Type: "ImplicitMeta",
-					Rule: "MAJORITY Admins",
-				},
-				"BlockValidation": {
-					Type: "ImplicitMeta",
-					Rule: "ANY Writers",
-				},
-			},
-			Organizations: []ConfigtxOrganization{ordererOrg},
-			Capabilities: map[string]bool{
-				"V1_4_2": true,
-				"V1_1":   false,
-			},
-		},
-		Capabilities: map[string]bool{
-			"V1_4_3": true,
-			"V1_3":   false,
-			"V1_1":   false,
-		},
-		Consortiums: map[string]ConfigtxConsortium{
-			"SampleConsortium": {Organizations: []ConfigtxOrganization{org1, org2}},
-		},
-		Policies: map[string]ConfigtxPolicy{
-			"Readers": {
-				Type: "ImplicitMeta",
-				Rule: "ANY Readers",
-			},
-			"Writers": {
-				Type: "ImplicitMeta",
-				Rule: "ANY Writers",
-			},
-			"Admins": {
-				Type: "ImplicitMeta",
-				Rule: "MAJORITY Admins",
-			},
-		},
-	}
-	configtx.Profiles = make(map[string]ConfigtxProfile)
-	configtx.Profiles["TwoOrgsOrdererGenesis"] = twoOrgsOrdererGenesis
-
-	// 生成channel文件相关配置
-	twoOrgsChannel := ConfigtxProfile{
-		Consortium: "SampleConsortium",
-		Application: ConfigtxApplication{
-			Organizations: []ConfigtxOrganization{org1, org2},
-			Policies: map[string]ConfigtxPolicy{
-				"Readers": {
-					Type: "ImplicitMeta",
-					Rule: "ANY Readers",
-				},
-				"Writers": {
-					Type: "ImplicitMeta",
-					Rule: "ANY Writers",
-				},
-				"Admins": {
-					Type: "ImplicitMeta",
-					Rule: "MAJORITY Admins",
-				},
-			},
-			Capabilities: map[string]bool{
-				"V1_4_2": true,
-				"V1_3":   false,
-				"V1_2":   false,
-				"V1_1":   false,
-			},
-		},
-		Capabilities: map[string]bool{
-			"V1_4_3": true,
-			"V1_3":   false,
-			"V1_1":   false,
-		},
-		Policies: map[string]ConfigtxPolicy{
-			"Readers": {
-				Type: "ImplicitMeta",
-				Rule: "ANY Readers",
-			},
-			"Writers": {
-				Type: "ImplicitMeta",
-				Rule: "ANY Writers",
-			},
-			"Admins": {
-				Type: "ImplicitMeta",
-				Rule: "MAJORITY Admins",
-			},
-		},
-	}
-	configtx.Profiles["TwoOrgsChannel"] = twoOrgsChannel
-	path := filepath.Join(filePath, defaultConfigtxFileName)
-	data, err := yaml.Marshal(configtx)
-	if err != nil {
+	if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
 		return err
 	}
-	return ioutil.WriteFile(path, data, 0755)
-}
 
-//func GenerateGensisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId string, nc *network.NetworkConfig) error {
-//	// generate genesis.block
-//	configtxgenPath := filepath.Join("tools", "configtxgen")
-//	channelArtifactsPath := filepath.Join(fileDir, "channel-artifacts")
-//	if err := os.MkdirAll(channelArtifactsPath, 0755); err != nil {
-//		return errors.Wrapf(err, "failed to create directory, path=%s", channelArtifactsPath)
-//	}
-//
-//	logger.Infof("begin to generate fabric genesis.block, genesis channel name is %s", defaultGenesisChannel)
-//	var args []string
-//	// ./configtxgen -profile TwoOrgsOrdererGenesis -channelID byfn-sys-channel -outputBlock ./channel-artifacts/genesis.block
-//	args = []string{
-//		fmt.Sprintf("--configPath=%s", fileDir),
-//		fmt.Sprintf("--profile=%s", defaultGenesisName),
-//		fmt.Sprintf("--channelID=%s", defaultGenesisChannel),
-//		fmt.Sprintf("--outputBlock=%s", filepath.Join(channelArtifactsPath, "genesis.block")),
-//	}
-//	if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
-//		return err
-//	}
-//
-//	// generate channel transaction
-//	// ./bin/configtxgen -profile TwoOrgsChannel -outputCreateChannelTx ./channel-artifacts/channel.tx -channelID $CHANNEL_NAME
-//	logger.Infof("begin to generate channel.tx, channel=%s", channelId)
-//	args = []string{
-//		fmt.Sprintf("--configPath=%s", fileDir),
-//		fmt.Sprintf("--profile=%s", defaultChannelProfileName),
-//		fmt.Sprintf("--channelID=%s", channelId),
-//		fmt.Sprintf("--outputCreateChannelTx=%s", filepath.Join(channelArtifactsPath, fmt.Sprintf("%s.tx", channelId))),
-//	}
-//	if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
-//		return err
-//	}
-//
-//	peerNodes, _, err := nc.GetNodesByChannel(channelId)
-//	if err != nil {
-//		return nil
-//	}
-//	peerOrgs := make(map[string]interface{})
-//	for _, node := range peerNodes {
-//		peerOrgs[node.OrgId] = nil
-//	}
-//	// TODO: does fabric2.x need this step???
-//	// generate anchor peer transaction
-//	// ./bin/configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate ./channel-artifacts/Org1anchors.tx -channelID $CHANNEL_NAME -asOrg Org1MSP
-//	for org := range peerOrgs {
-//		logger.Infof("begin to generate anchors.tx, org=%s", org)
-//		args = []string{
-//			fmt.Sprintf("--configPath=%s", fileDir),
-//			fmt.Sprintf("--profile=%s", defaultChannelProfileName),
-//			fmt.Sprintf("--channelID=%s", channelId),
-//			fmt.Sprintf("--outputAnchorPeersUpdate=%s", filepath.Join(channelArtifactsPath, fmt.Sprintf("%sanchors.tx", org))),
-//			fmt.Sprintf("--asOrg=%s", org),
-//		}
-//		if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
-//			return err
-//		}
-//	}
-//	return nil
-//}
+	// generate channel transaction
+	// ./bin/configtxgen -profile TwoOrgsChannel -outputCreateChannelTx ./channel-artifacts/channel.tx -channelID $CHANNEL_NAME
+	logger.Infof("begin to generate channel.tx, channel=%s", channelId)
+	args = []string{
+		fmt.Sprintf("--configPath=%s", fileDir),
+		fmt.Sprintf("--profile=%s", defaultChannelProfileName),
+		fmt.Sprintf("--channelID=%s", channelId),
+		fmt.Sprintf("--outputCreateChannelTx=%s", filepath.Join(channelArtifactsPath, fmt.Sprintf("%s.tx", channelId))),
+	}
+	if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
+		return err
+	}
+
+	peerNodes, _, err := nc.GetNodesByChannel(channelId)
+	if err != nil {
+		return nil
+	}
+	peerOrgs := make(map[string]interface{})
+	for _, node := range peerNodes {
+		peerOrgs[node.OrgId] = nil
+	}
+	// generate anchor peer transaction
+	// ./bin/configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate ./channel-artifacts/Org1anchors.tx -channelID $CHANNEL_NAME -asOrg Org1MSP
+	for org := range peerOrgs {
+		logger.Infof("begin to generate anchors.tx, org=%s", org)
+		args = []string{
+			fmt.Sprintf("--configPath=%s", fileDir),
+			fmt.Sprintf("--profile=%s", defaultChannelProfileName),
+			fmt.Sprintf("--channelID=%s", channelId),
+			fmt.Sprintf("--outputAnchorPeersUpdate=%s", filepath.Join(channelArtifactsPath, fmt.Sprintf("%sanchors.tx", org))),
+			fmt.Sprintf("--asOrg=%s", org),
+		}
+		if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func GenerateGenesisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId string, nc *network.NetworkConfig) error {
 	// generate genesis.block

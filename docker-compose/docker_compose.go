@@ -78,7 +78,7 @@ func GenerateOrdererDockerComposeFile(filePath string, orderer *network.Node, ot
 				filePath, orderer.Domain, orderer.GetHostname()),
 			// fmt.Sprintf("%s:/var/hyperledger/production/orderer", ordererURLArgs[0]),
 		},
-		Ports:      []string{fmt.Sprintf("%[1]d:%[1]d", orderer.NodePort)},
+		Ports:      []string{fmt.Sprintf("%[1]d:7050", orderer.NodePort)},
 		Networks:   []string{defaultNetworkName},
 		ExtraHosts: otherUrls,
 	}
