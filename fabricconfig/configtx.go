@@ -366,7 +366,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 // GenerateGenesisBlockAndChannelTxAndAnchorPeerUsingBinary generates files using configtxgen
 func GenerateGenesisBlockAndChannelTxAndAnchorPeerUsingBinary(fileDir string, channelId string, nc *network.NetworkConfig) error {
 	// generate genesis.block
-	configtxgenPath := filepath.Join("/home/wjbbig/workspace/go/src/github.com/hyperledger/fabric-samples/bin", "configtxgen")
+	configtxgenPath := filepath.Join("tools", "configtxgen")
 	channelArtifactsPath := filepath.Join(fileDir, "channel-artifacts")
 	if err := os.MkdirAll(channelArtifactsPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create directory, path=%s", channelArtifactsPath)
