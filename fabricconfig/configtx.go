@@ -26,8 +26,8 @@ const (
 	defaultConfigtxFileName   = "configtx.yaml"
 	defaultConsortiumName     = "FabricConsortiums"
 	defaultGenesisName        = "FabricGenesis"
-	ordererType_SOLO          = "solo"
-	ordererType_ETCDRAFT      = "etcdraft"
+	OrdererType_SOLO          = "solo"
+	OrdererType_ETCDRAFT      = "etcdraft"
 	defaultChannelProfileName = "FabricChannel"
 	defaultGenesisChannel     = "fabric-genesis-channel"
 )
@@ -266,7 +266,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 	}
 
 	switch ordererType {
-	case ordererType_ETCDRAFT:
+	case OrdererType_ETCDRAFT:
 		ordererApplication := application
 		ordererApplication.Organizations = ordererOrganizations
 		configtx.Profiles = map[string]ConfigtxProfile{

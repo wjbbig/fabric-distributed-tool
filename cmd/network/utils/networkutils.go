@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/wjbbig/fabric-distributed-tool/connectionprofile"
 	docker_compose "github.com/wjbbig/fabric-distributed-tool/docker-compose"
@@ -323,7 +324,7 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 	}
 	// startup command only starts a fabric network with one channel and one chaincode right now
 	// TODO: support multi channels
-	var channelId, ccId, ccPath, ccInitParam, ccVersion, ccPolicy string
+	var channelId, ccId, ccPath, ccInitParam, ccVersion, ccPolicy, consensus string
 	var ifInstallCC bool
 	for name, channel := range nc.Channels {
 		channelId = name
@@ -337,6 +338,7 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 		ccVersion = nc.Chaincodes[channel.Chaincodes[0]].Version
 		ccPolicy = nc.Chaincodes[channel.Chaincodes[0]].Policy
 		ccId = channel.Chaincodes[0]
+		consensus = channel.Consensus
 	}
 	if err := fabricconfig.GenerateGenesisBlockAndChannelTxAndAnchorPeer(dataDir, channelId, nc); err != nil {
 		return err
@@ -363,6 +365,11 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 		return err
 	}
 	defer sdk.Close()
+
+	if consensus == fabricconfig.OrdererType_ETCDRAFT {
+		logger.Info("sleeping 15s to allow etcdraft cluster to complete booting")
+		time.Sleep(time.Second * 15)
+	}
 
 	// create channel
 	if err := CreateChannel(nc, dataDir, channelId, sdk); err != nil {
