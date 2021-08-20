@@ -39,10 +39,10 @@ type Node struct {
 }
 
 type Channel struct {
-	Consensus  string   `yaml:"consensus,omitempty"`
-	Peers      []string `yaml:"peers,omitempty"`
-	Orderers   []string `yaml:"orderers,omitempty"`
-	Chaincodes []string `yaml:"chaincodes,omitempty"`
+	Consensus  string             `yaml:"consensus,omitempty"`
+	Peers      []string           `yaml:"peers,omitempty"`
+	Orderers   []string           `yaml:"orderers,omitempty"`
+	Chaincodes []ChannelChaincode `yaml:"chaincodes,omitempty"`
 }
 
 type Chaincode struct {
@@ -51,7 +51,11 @@ type Chaincode struct {
 	Policy       string `yaml:"policy,omitempty"`
 	InitRequired bool   `yaml:"init_required,omitempty"`
 	InitParam    string `yaml:"init_param,omitempty"`
-	Sequence     int64  `yaml:"sequence,omitempty"`
+}
+
+type ChannelChaincode struct {
+	Name     string `yaml:"name,omitempty"`
+	Sequence int64  `yaml:"sequence,omitempty"`
 }
 
 func (nc *NetworkConfig) GetPeerNodes() (peerNodes []*Node) {
@@ -98,7 +102,6 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 
 	network.Name = networkName
 	chaincode := &Chaincode{
-		Sequence:     sequence,
 		Path:         ccPath,
 		Policy:       ccPolicy,
 		Version:      ccVersion,
@@ -127,7 +130,10 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 		nodes[node.hostname] = node
 		channel.Orderers = append(channel.Orderers, node.hostname)
 	}
-	channel.Chaincodes = append(channel.Chaincodes, ccId)
+	channel.Chaincodes = append(channel.Chaincodes, ChannelChaincode{
+		Name:     ccId,
+		Sequence: sequence,
+	})
 	channels[channelId] = channel
 	network.Channels = channels
 	network.Nodes = nodes

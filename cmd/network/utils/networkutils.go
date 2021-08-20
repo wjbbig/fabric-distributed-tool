@@ -333,11 +333,11 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 		} else {
 			break
 		}
-		ccPath = nc.Chaincodes[channel.Chaincodes[0]].Path
-		ccInitParam = nc.Chaincodes[channel.Chaincodes[0]].InitParam
-		ccVersion = nc.Chaincodes[channel.Chaincodes[0]].Version
-		ccPolicy = nc.Chaincodes[channel.Chaincodes[0]].Policy
-		ccId = channel.Chaincodes[0]
+		ccPath = nc.Chaincodes[channel.Chaincodes[0].Name].Path
+		ccInitParam = nc.Chaincodes[channel.Chaincodes[0].Name].InitParam
+		ccVersion = nc.Chaincodes[channel.Chaincodes[0].Name].Version
+		ccPolicy = nc.Chaincodes[channel.Chaincodes[0].Name].Policy
+		ccId = channel.Chaincodes[0].Name
 		consensus = channel.Consensus
 	}
 	if err := fabricconfig.GenerateGenesisBlockAndChannelTxAndAnchorPeer(dataDir, channelId, nc); err != nil {
