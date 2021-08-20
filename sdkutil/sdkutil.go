@@ -200,7 +200,7 @@ func (driver *FabricSDKDriver) PackageCC(ccId, ccPath, outputPath string) (strin
 }
 
 // InstallCCV2 uses to install chaincode for fabric v2.0
-func (driver *FabricSDKDriver) InstallCCV2(ccId, channelId, orgId, peerEndpoint string, ccPkg []byte) error {
+func (driver *FabricSDKDriver) InstallCCV2(ccId, channelId, orgId, peerEndpoint string, ccPkg []byte) (string, error) {
 	installCCReq := resmgmt.LifecycleInstallCCRequest{
 		Label:   ccId,
 		Package: ccPkg,
@@ -208,16 +208,31 @@ func (driver *FabricSDKDriver) InstallCCV2(ccId, channelId, orgId, peerEndpoint 
 	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
 	resMgmtClient, err := resmgmt.New(clientContext)
 	if err != nil {
-		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
+		return "", errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
 	}
 	packageId := lcpackager.ComputePackageID(ccId, ccPkg)
-	resp, err := resMgmtClient.LifecycleInstallCC(installCCReq, resmgmt.WithRetry(retry.DefaultResMgmtOpts))
+	resp, err := resMgmtClient.LifecycleInstallCC(installCCReq,
+		resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+		resmgmt.WithTargetEndpoints(peerEndpoint))
 	if err != nil {
-		return errors.Wrap(err, "install chaincode failed")
+		return "", errors.Wrap(err, "install chaincode failed")
 	}
 	if resp[0].PackageID != packageId {
-		return errors.Wrap(err, "packageId from install response is not equal to the id from computed")
+		return "", errors.Wrap(err, "packageId from install response is not equal to the id from computed")
 	}
+
+	return packageId, nil
+}
+
+func (driver *FabricSDKDriver) QueryGetInstalled(channelId, orgId, packageId, peerEndpoint string) error {
+	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
+	resMgmtClient, err := resmgmt.New(clientContext)
+	if err != nil {
+		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
+	}
+	_, err = resMgmtClient.LifecycleGetInstalledCCPackage(packageId,
+		resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+		resmgmt.WithTargetEndpoints(peerEndpoint))
 
 	return nil
 }
