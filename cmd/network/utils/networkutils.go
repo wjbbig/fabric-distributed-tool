@@ -34,7 +34,7 @@ func GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, c
 	return network.GenerateNetworkConfig(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy, ccInitRequired, sequence, couchdb, peerUrls, ordererUrls)
 }
 
-func GenerateConfigtx(dataDir, consensus, channelId string, networkConfig *network.NetworkConfig) error {
+func GenerateConfigtx(dataDir, consensus, channelId, fversion string, networkConfig *network.NetworkConfig) error {
 	peerNodes, ordererNodes, err := networkConfig.GetNodesByChannel(channelId)
 	if err != nil {
 		return err
@@ -46,7 +46,7 @@ func GenerateConfigtx(dataDir, consensus, channelId string, networkConfig *netwo
 			consensus = "etcdraft"
 		}
 	}
-	if err := fabricconfig.GenerateConfigtxFile(dataDir, consensus, ordererNodes, peerNodes); err != nil {
+	if err := fabricconfig.GenerateConfigtxFile(dataDir, consensus, ordererNodes, peerNodes, fversion); err != nil {
 		return err
 	}
 	return nil
@@ -294,7 +294,8 @@ func InstantiateCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId
 
 // ==========================cmd=========================
 
-func DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, ifCouchdb bool, peerUrls, ordererUrls []string) error {
+func DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam,
+	ccPolicy string, ccInitRequired bool, sequence int64, ifCouchdb bool, peerUrls, ordererUrls []string, fVersion string) error {
 	networkConfig, err := GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy, ccInitRequired, sequence, ifCouchdb, peerUrls, ordererUrls)
 	if err != nil {
 		return err
@@ -302,7 +303,7 @@ func DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId
 	if err := GenerateCryptoConfig(dataDir, networkConfig); err != nil {
 		return err
 	}
-	if err := GenerateConfigtx(dataDir, consensus, channelId, networkConfig); err != nil {
+	if err := GenerateConfigtx(dataDir, consensus, channelId, fVersion, networkConfig); err != nil {
 		return err
 	}
 	if err := GenerateDockerCompose(dataDir, networkConfig, ifCouchdb); err != nil {

@@ -224,17 +224,17 @@ func (driver *FabricSDKDriver) InstallCCV2(ccId, channelId, orgId, peerEndpoint 
 	return packageId, nil
 }
 
-func (driver *FabricSDKDriver) QueryGetInstalled(channelId, orgId, packageId, peerEndpoint string) error {
+func (driver *FabricSDKDriver) QueryGetInstalled(channelId, orgId, packageId, peerEndpoint string) ([]byte, error) {
 	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
 	resMgmtClient, err := resmgmt.New(clientContext)
 	if err != nil {
-		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
+		return nil, errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
 	}
-	_, err = resMgmtClient.LifecycleGetInstalledCCPackage(packageId,
+	ccPkg, err := resMgmtClient.LifecycleGetInstalledCCPackage(packageId,
 		resmgmt.WithRetry(retry.DefaultResMgmtOpts),
 		resmgmt.WithTargetEndpoints(peerEndpoint))
 
-	return nil
+	return ccPkg, nil
 }
 
 func (driver *FabricSDKDriver) QueryInstalled(channelId, orgId, peerEndpoint string) error {
@@ -252,7 +252,7 @@ func (driver *FabricSDKDriver) QueryInstalled(channelId, orgId, peerEndpoint str
 	return nil
 }
 
-func (driver *FabricSDKDriver) ApproveCC(ccId, ccVersion, ccPolicy, channelId, orgId, peerEndpoint, ordererEndpoint, packageId string, sequence int64) error {
+func (driver *FabricSDKDriver) ApproveCC(ccId, ccVersion, ccPolicy, channelId, orgId, peerEndpoint, ordererEndpoint, packageId string, sequence int64, initRequired bool) error {
 	policy, err := policydsl.FromString(ccPolicy)
 	if err != nil {
 		return errors.Wrap(err, "build ccPolicy failed")
@@ -270,6 +270,7 @@ func (driver *FabricSDKDriver) ApproveCC(ccId, ccVersion, ccPolicy, channelId, o
 		EndorsementPlugin: "escc",
 		ValidationPlugin:  "vscc",
 		SignaturePolicy:   policy,
+		InitRequired:      initRequired,
 	}
 
 	txId, err := resMgmtClient.LifecycleApproveCC(channelId, approveCCReq, resmgmt.WithTargetEndpoints(peerEndpoint),
@@ -287,12 +288,10 @@ func (driver *FabricSDKDriver) QueryApprovedCC(ccId string, channelId, orgId, pe
 	if err != nil {
 		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
 	}
-
 	queryApprovedCCReq := resmgmt.LifecycleQueryApprovedCCRequest{
 		Name:     ccId,
 		Sequence: sequence,
 	}
-
 	_, err = resMgmtClient.LifecycleQueryApprovedCC(channelId, queryApprovedCCReq, resmgmt.WithTargetEndpoints(peerEndpoint),
 		resmgmt.WithRetry(retry.DefaultResMgmtOpts))
 	if err != nil {
@@ -301,7 +300,7 @@ func (driver *FabricSDKDriver) QueryApprovedCC(ccId string, channelId, orgId, pe
 	return nil
 }
 
-func (driver *FabricSDKDriver) CommitCC(ccId, ccVersion, ccPolicy, channelId, orgId, peerEndpoint, ordererEndpoint, packageId string, sequence int64, initRequired bool) error {
+func (driver *FabricSDKDriver) CommitCC(ccId, ccVersion, ccPolicy, channelId, orgId, peerEndpoint, ordererEndpoint string, sequence int64, initRequired bool) error {
 	policy, err := policydsl.FromString(ccPolicy)
 	req := resmgmt.LifecycleCommitCCRequest{
 		Name:              ccId,
@@ -343,17 +342,18 @@ func (driver *FabricSDKDriver) QueryCommittedCC(ccId, channelId, orgId, peerEndp
 	return nil
 }
 
-func (driver *FabricSDKDriver) InitCC(ccId, channelId, orgId string, args []string) error {
+func (driver *FabricSDKDriver) InitCC(ccId, channelId, orgId, fcn string, args []string, peerEndpoints []string) error {
 	clientChannelContext := driver.fabSDK.ChannelContext(channelId, fabsdk.WithUser("User1"), fabsdk.WithOrg(orgId))
 	client, err := channel.New(clientChannelContext)
 	if err != nil {
 		return errors.Wrap(err, "Failed to create new channel client")
 	}
-	resp, err := client.Execute(channel.Request{ChaincodeID: ccId, Fcn: "init", Args: parseCCArgs(args), IsInit: true},
-		channel.WithRetry(retry.DefaultChannelOpts))
+	resp, err := client.Execute(channel.Request{ChaincodeID: ccId, Fcn: fcn, Args: parseCCArgs(args), IsInit: true},
+		channel.WithRetry(retry.DefaultChannelOpts),
+		channel.WithTargetEndpoints(peerEndpoints...))
 	if err != nil {
 		return errors.Wrap(err, "init chaincode failed")
 	}
-	logger.Infof("init chaincode %s success, txid=%s", ccId, resp)
+	logger.Infof("init chaincode %s success, txid=%s", ccId, resp.TransactionID)
 	return nil
 }

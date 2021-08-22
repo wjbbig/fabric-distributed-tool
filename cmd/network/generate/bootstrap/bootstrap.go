@@ -41,7 +41,7 @@ func resetFlags() {
 	// generate -p a -p b -p c
 	flags.StringArrayVarP(&peerUrls, "peerurls", "p", nil, "Urls of fabric peers")
 	flags.StringArrayVarP(&ordererUrls, "ordererurls", "o", nil, "Urls of fabric orderers")
-	flags.StringVarP(&fabricVersion, "version", "V", "1.4", "Version of fabric, value can be 1.4 or 2.0")
+	flags.StringVarP(&fabricVersion, "version", "V", "v1.4", "Version of fabric, value can be v1.4 or v2.0")
 	flags.StringVarP(&channelId, "channelid", "c", "", "Fabric channel name")
 	flags.StringVarP(&consensus, "consensus", "C", "", "Orderer consensus type of fabric network")
 	flags.StringVarP(&ccId, "chaincodeid", "n", "", "Chaincode name")
@@ -66,7 +66,7 @@ var bootstrapCmd = &cobra.Command{
 		if _, err := os.Stat(dataDir); err != nil {
 			_ = os.MkdirAll(dataDir, 0755)
 		}
-		if err := utils.DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy, ccInitRequired, ccSequence, ifCouchdb, peerUrls, ordererUrls); err != nil {
+		if err := utils.DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy, ccInitRequired, ccSequence, ifCouchdb, peerUrls, ordererUrls, fabricVersion); err != nil {
 			logger.Error(err.Error())
 			return nil
 		}
