@@ -28,6 +28,8 @@ const (
 	defaultGenesisName        = "FabricGenesis"
 	OrdererType_SOLO          = "solo"
 	OrdererType_ETCDRAFT      = "etcdraft"
+	FabricVersion_V14         = "v1.4"
+	FabricVersion_V20         = "v2.0"
 	defaultChannelProfileName = "FabricChannel"
 	defaultGenesisChannel     = "fabric-genesis-channel"
 )
@@ -110,6 +112,7 @@ type ConfigtxAnchorPeer struct {
 }
 
 type ConfigtxApplication struct {
+	ACLs          map[string]string         `yaml:"ACLs,omitempty"`
 	Organizations []ConfigtxOrganization    `yaml:"Organizations,omitempty"`
 	Policies      map[string]ConfigtxPolicy `yaml:"Policies,omitempty"`
 	Capabilities  map[string]bool           `yaml:"Capabilities,omitempty"`
@@ -124,7 +127,7 @@ func orderPeerOrdererByOrg(nodes []*network.Node) map[string][]*network.Node {
 	return orderedUrl
 }
 
-func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers []*network.Node) error {
+func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers []*network.Node, version string) error {
 	logger.Infof("begin to generate configtx.yaml, consensus type=%s", ordererType)
 	defer logger.Info("finish generating configtx.yaml")
 	var configtx Configtx
@@ -168,7 +171,16 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 		}
 		ordererOrganizations = append(ordererOrganizations, ordererOrganization)
 	}
-
+	var capabilities map[string]bool
+	if version == FabricVersion_V20 {
+		capabilities = map[string]bool{
+			"V2_0": true,
+		}
+	} else {
+		capabilities = map[string]bool{
+			"V1_4_3": true,
+		}
+	}
 	orderer := ConfigtxOrderer{
 		OrdererType:  ordererType,
 		Addresses:    ordererAddresses,
@@ -198,9 +210,13 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 				Rule: "ANY Writers",
 			},
 		},
-		Capabilities: map[string]bool{
+	}
+	if version == FabricVersion_V20 {
+		orderer.Capabilities = capabilities
+	} else {
+		orderer.Capabilities = map[string]bool{
 			"V1_4_2": true,
-		},
+		}
 	}
 
 	var peerOrganizations []ConfigtxOrganization
@@ -236,11 +252,37 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 			},
 			AnchorPeers: anchorPeers,
 		}
-		// TODO 2.0
+		if version == FabricVersion_V20 {
+			peerOrganization.Policies[fconfigtx.EndorsementPolicyKey] = ConfigtxPolicy{
+				Type: fconfigtx.SignaturePolicyType,
+				Rule: fmt.Sprintf("OR('%s.member')", randomPeer.OrgId),
+			}
+		}
 		peerOrganizations = append(peerOrganizations, peerOrganization)
 	}
 
 	application := ConfigtxApplication{
+		ACLs: map[string]string{
+			"_lifecycle/CheckCommitReadiness":      "/Channel/Application/Writers",
+			"_lifecycle/CommitChaincodeDefinition": "/Channel/Application/Writers",
+			"_lifecycle/QueryChaincodeDefinition":  "/Channel/Application/Writers",
+			"_lifecycle/QueryChaincodeDefinitions": "/Channel/Application/Writers",
+			"lscc/ChaincodeExists":                 "/Channel/Application/Readers",
+			"lscc/GetDeploymentSpec":               "/Channel/Application/Readers",
+			"lscc/GetChaincodeData":                "/Channel/Application/Readers",
+			"lscc/GetInstantiatedChaincodes":       "/Channel/Application/Readers",
+			"qscc/GetChainInfo":                    "/Channel/Application/Readers",
+			"qscc/GetBlockByNumber":                "/Channel/Application/Readers",
+			"qscc/GetBlockByHash":                  "/Channel/Application/Readers",
+			"qscc/GetTransactionByID":              "/Channel/Application/Readers",
+			"qscc/GetBlockByTxID":                  "/Channel/Application/Readers",
+			"cscc/GetConfigBlock":                  "/Channel/Application/Readers",
+			"cscc/GetChannelConfig":                "/Channel/Application/Readers",
+			"peer/Propose":                         "/Channel/Application/Writers",
+			"peer/ChaincodeToChaincode":            "/Channel/Application/Writers",
+			"event/Block":                          "/Channel/Application/Readers",
+			"event/FilteredBlock":                  "/Channel/Application/Readers",
+		},
 		Organizations: peerOrganizations,
 		Policies: map[string]ConfigtxPolicy{
 			fconfigtx.ReadersPolicyKey: {
@@ -255,14 +297,25 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 				Type: fconfigtx.ImplicitMetaPolicyType,
 				Rule: "ANY Admins",
 			},
-			// TODO 2.0
 		},
 		Capabilities: map[string]bool{
-			"V1_4_2": true,
-			"V1_3":   false,
-			"V1_2":   false,
-			"V1_1":   false,
+			"V1_3": false,
+			"V1_2": false,
+			"V1_1": false,
 		},
+	}
+	if version == FabricVersion_V20 {
+		application.Policies[fconfigtx.EndorsementPolicyKey] = ConfigtxPolicy{
+			Type: fconfigtx.ImplicitMetaPolicyType,
+			Rule: "ANY Endorsement",
+		}
+		application.Policies[fconfigtx.LifecycleEndorsementPolicyKey] = ConfigtxPolicy{
+			Type: fconfigtx.ImplicitMetaPolicyType,
+			Rule: "ANY Endorsement",
+		}
+		application.Capabilities["V2_0"] = true
+	} else {
+		application.Capabilities["V1_4_2"] = true
 	}
 
 	switch ordererType {
@@ -271,13 +324,9 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 		ordererApplication.Organizations = ordererOrganizations
 		configtx.Profiles = map[string]ConfigtxProfile{
 			defaultGenesisName: {
-				Orderer:     orderer,
-				Application: ordererApplication,
-				Capabilities: map[string]bool{
-					"V1_4_3": true,
-					"V1_3":   false,
-					"V1_1":   false,
-				},
+				Orderer:      orderer,
+				Application:  ordererApplication,
+				Capabilities: capabilities,
 				Consortiums: map[string]ConfigtxConsortium{
 					defaultConsortiumName: {
 						Organizations: peerOrganizations,
@@ -302,12 +351,8 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 	default:
 		configtx.Profiles = map[string]ConfigtxProfile{
 			defaultGenesisName: {
-				Orderer: orderer,
-				Capabilities: map[string]bool{
-					"V1_4_3": true,
-					"V1_3":   false,
-					"V1_1":   false,
-				},
+				Orderer:      orderer,
+				Capabilities: capabilities,
 				Consortiums: map[string]ConfigtxConsortium{
 					defaultConsortiumName: {
 						Organizations: peerOrganizations,
@@ -332,13 +377,9 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 	}
 
 	configtx.Profiles[defaultChannelProfileName] = ConfigtxProfile{
-		Consortium:  defaultConsortiumName,
-		Application: application,
-		Capabilities: map[string]bool{
-			"V1_4_3": true,
-			"V1_3":   false,
-			"V1_1":   false,
-		},
+		Consortium:   defaultConsortiumName,
+		Application:  application,
+		Capabilities: capabilities,
 		Policies: map[string]ConfigtxPolicy{
 			fconfigtx.ReadersPolicyKey: {
 				Type: fconfigtx.ImplicitMetaPolicyType,
@@ -354,6 +395,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 			},
 		},
 	}
+
 	data, err := yaml.Marshal(configtx)
 	if err != nil {
 		return err
