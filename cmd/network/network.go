@@ -2,6 +2,7 @@ package network
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/wjbbig/fabric-distributed-tool/cmd/network/chaincode/deploycc"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/generate"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/shutdown"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/startup"
@@ -21,4 +22,5 @@ func init() {
 	networkCmd.AddCommand(generate.Cmd())
 	networkCmd.AddCommand(startup.Cmd())
 	networkCmd.AddCommand(shutdown.Cmd())
+	networkCmd.AddCommand(deploycc.Cmd())
 }

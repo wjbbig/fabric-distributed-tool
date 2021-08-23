@@ -97,6 +97,37 @@ func (nc *NetworkConfig) GetNodesByChannel(channelId string) (peerNodes []*Node,
 	return
 }
 
+// ExtendChannelChaincode installs a new chaincode on channel
+func (nc *NetworkConfig) ExtendChannelChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam string, initRequired bool) error {
+	chaincode, exist := nc.Chaincodes[ccId]
+	if exist {
+		return errors.Errorf("chaincode %s exists", ccId)
+	}
+	chaincode = &Chaincode{
+		Path:         ccPath,
+		Version:      ccVersion,
+		Policy:       ccPolicy,
+		InitRequired: initRequired,
+		InitParam:    initParam,
+	}
+	nc.Chaincodes[ccId] = chaincode
+	channel, exist := nc.Channels[channelId]
+	if !exist {
+		return errors.Errorf("channel %s dose not exist", channelId)
+	}
+	channel.Chaincodes = append(channel.Chaincodes, ChannelChaincode{
+		Name:     ccId,
+		Sequence: 1,
+	})
+	nc.Channels[channelId] = channel
+	data, err := yaml.Marshal(nc)
+	if err != nil {
+		return errors.Wrapf(err, "yaml marshal failed")
+	}
+	filePath := filepath.Join(dataDir, defaultNetworkConfigName)
+	return utils.WriteFile(filePath, data, 0755)
+}
+
 func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string) (*NetworkConfig, error) {
 	network := &NetworkConfig{}
 
