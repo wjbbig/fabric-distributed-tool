@@ -292,6 +292,22 @@ func InstantiateCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId
 	return nil
 }
 
+func UpgradeCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId,
+	policy, initArgsStr string, initRequired bool, sdk *sdkutil.FabricSDKDriver) error {
+	initArgs := strings.Split(initArgsStr, ",")
+	peerNodes, _, err := nc.GetNodesByChannel(channelId)
+	if err != nil {
+		return err
+	}
+	for _, node := range peerNodes {
+		if err := sdk.UpdateCC(ccId, ccPath, ccVersion, channelId, node.OrgId, policy, initArgs, node.GetHostname()); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func deployCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPath, ccVersion,
 	ccPolicy, ccInitParam string, initRequired bool) error {
 	sdk, err := sdkutil.NewFabricSDKDriver(filepath.Join(dataDir, connectionConfigFileName))
@@ -314,6 +330,26 @@ func deployCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPa
 		}
 	}
 	return nil
+}
+
+func upgradeCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPath, ccVersion,
+	ccPolicy, ccInitParam string, initRequired bool) error {
+
+	sdk, err := sdkutil.NewFabricSDKDriver(filepath.Join(dataDir, connectionConfigFileName))
+	if err != nil {
+		return err
+	}
+	defer sdk.Close()
+
+	switch nc.Version {
+	case fabricconfig.FabricVersion_V20:
+		fmt.Println("NOT SUPPORT")
+	default:
+		if err := UpgradeCC(nc, ccId, ccPath, ccVersion, channelId, ccPolicy, ccInitParam, initRequired, sdk); err != nil {
+			return err
+		}
+	}
+	return err
 }
 
 // ==========================cmd=========================
@@ -427,6 +463,20 @@ func DoDeployccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initPa
 		return err
 	}
 	if err = deployCCByVersion(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam, initRequired); err != nil {
+		return err
+	}
+	return err
+}
+
+func DoUpgradeccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam string, initRequired bool) error {
+	nc, err := network.UnmarshalNetworkConfig(dataDir)
+	if err != nil {
+		return err
+	}
+	if err = nc.UpgradeChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam, initRequired); err != nil {
+		return err
+	}
+	if err = upgradeCCByVersion(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam, initRequired); err != nil {
 		return err
 	}
 	return err

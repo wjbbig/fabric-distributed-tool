@@ -40,10 +40,10 @@ type Node struct {
 }
 
 type Channel struct {
-	Consensus  string             `yaml:"consensus,omitempty"`
-	Peers      []string           `yaml:"peers,omitempty"`
-	Orderers   []string           `yaml:"orderers,omitempty"`
-	Chaincodes []ChannelChaincode `yaml:"chaincodes,omitempty"`
+	Consensus  string              `yaml:"consensus,omitempty"`
+	Peers      []string            `yaml:"peers,omitempty"`
+	Orderers   []string            `yaml:"orderers,omitempty"`
+	Chaincodes []*ChannelChaincode `yaml:"chaincodes,omitempty"`
 }
 
 type Chaincode struct {
@@ -116,11 +116,48 @@ func (nc *NetworkConfig) ExtendChannelChaincode(dataDir, channelId, ccId, ccPath
 	if !exist {
 		return errors.Errorf("channel %s dose not exist", channelId)
 	}
-	channel.Chaincodes = append(channel.Chaincodes, ChannelChaincode{
+	channel.Chaincodes = append(channel.Chaincodes, &ChannelChaincode{
 		Name:     ccId,
 		Sequence: 1,
 	})
 	nc.Channels[channelId] = channel
+	data, err := yaml.Marshal(nc)
+	if err != nil {
+		return errors.Wrapf(err, "yaml marshal failed")
+	}
+	filePath := filepath.Join(dataDir, defaultNetworkConfigName)
+	return utils.WriteFile(filePath, data, 0755)
+}
+
+func (nc *NetworkConfig) UpgradeChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam string, initRequired bool) error {
+	chaincode, exist := nc.Chaincodes[ccId]
+	if !exist {
+		return errors.Errorf("chaincode %s does not exist", ccId)
+	}
+	if ccPath != "" {
+		chaincode.Path = ccPath
+	}
+	if ccPolicy != "" {
+		chaincode.Policy = ccPolicy
+	}
+	if initParam != "" {
+		chaincode.InitParam = initParam
+	}
+	// args must be defined
+	chaincode.Version = ccVersion
+	chaincode.InitRequired = initRequired
+
+	channel, exist := nc.Channels[channelId]
+	if !exist {
+		return errors.Errorf("channel %s dose not exist", channelId)
+	}
+	for _, channelChaincode := range channel.Chaincodes {
+		if channelChaincode.Name == ccId {
+			channelChaincode.Sequence++
+			break
+		}
+	}
+
 	data, err := yaml.Marshal(nc)
 	if err != nil {
 		return errors.Wrapf(err, "yaml marshal failed")
@@ -162,7 +199,7 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 		nodes[node.hostname] = node
 		channel.Orderers = append(channel.Orderers, node.hostname)
 	}
-	channel.Chaincodes = append(channel.Chaincodes, ChannelChaincode{
+	channel.Chaincodes = append(channel.Chaincodes, &ChannelChaincode{
 		Name:     ccId,
 		Sequence: sequence,
 	})

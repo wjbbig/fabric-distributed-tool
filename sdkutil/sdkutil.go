@@ -135,7 +135,7 @@ func (driver *FabricSDKDriver) InstantiateCC(ccId, ccPath, ccVersion, channelId,
 	return nil
 }
 
-func (driver *FabricSDKDriver) UpdateCC(ccId, ccPath, ccVersion, channelId, orgId, policy string, initArgs []string) error {
+func (driver *FabricSDKDriver) UpdateCC(ccId, ccPath, ccVersion, channelId, orgId, policy string, initArgs []string, peerEndpoint string) error {
 	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
 	resMgmtClient, err := resmgmt.New(clientContext)
 	if err != nil {
@@ -152,7 +152,8 @@ func (driver *FabricSDKDriver) UpdateCC(ccId, ccPath, ccVersion, channelId, orgI
 		Args:    parseCCArgs(initArgs),
 		Policy:  ccPolicy,
 	}
-	resp, err := resMgmtClient.UpgradeCC(channelId, req, resmgmt.WithRetry(retry.DefaultResMgmtOpts))
+	resp, err := resMgmtClient.UpgradeCC(channelId, req, resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+		resmgmt.WithTargetEndpoints(peerEndpoint))
 	if err != nil {
 		return errors.Wrapf(err, "upgrade chaincode %s failed, err=%s", ccId, err)
 	}
