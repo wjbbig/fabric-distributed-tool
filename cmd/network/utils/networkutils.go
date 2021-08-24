@@ -292,6 +292,30 @@ func InstantiateCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId
 	return nil
 }
 
+func deployCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPath, ccVersion,
+	ccPolicy, ccInitParam string, initRequired bool) error {
+	sdk, err := sdkutil.NewFabricSDKDriver(filepath.Join(dataDir, connectionConfigFileName))
+	if err != nil {
+		return err
+	}
+	defer sdk.Close()
+
+	switch nc.Version {
+	case fabricconfig.FabricVersion_V20:
+		fmt.Println("NOT SUPPORT")
+	default:
+		if err := InstallCC(nc, ccId, ccPath, ccVersion, channelId, sdk); err != nil {
+			return err
+		}
+		// InstantiateCC
+		if err := InstantiateCC(nc, ccId, ccPath, ccVersion, channelId,
+			ccPolicy, ccInitParam, sdk); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ==========================cmd=========================
 
 func DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam,
@@ -392,6 +416,20 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 		}
 	}
 	return nil
+}
+
+func DoDeployccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam string, initRequired bool) error {
+	nc, err := network.UnmarshalNetworkConfig(dataDir)
+	if err != nil {
+		return err
+	}
+	if err = nc.ExtendChannelChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam, initRequired); err != nil {
+		return err
+	}
+	if err = deployCCByVersion(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam, initRequired); err != nil {
+		return err
+	}
+	return err
 }
 
 func DoShutdownCommand(dataDir string) error {

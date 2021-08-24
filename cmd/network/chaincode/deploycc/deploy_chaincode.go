@@ -3,6 +3,7 @@ package deploycc
 import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/wjbbig/fabric-distributed-tool/cmd/network/utils"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
 )
 
@@ -28,12 +29,15 @@ var installChaincodeCmd = &cobra.Command{
 	Short: "deploy a new chaincode on the specified channel",
 	Long:  "deploy a new chaincode on the specified channel",
 	RunE: func(cmd *cobra.Command, args []string) error {
-
+		if err := utils.DoDeployccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam, initRequired); err != nil {
+			logger.Error(err.Error())
+		}
 		return nil
 	},
 }
 
 func Cmd() *cobra.Command {
+	installChaincodeCmd.Flags().AddFlagSet(flags)
 	return installChaincodeCmd
 }
 

@@ -19,6 +19,7 @@ const (
 
 type NetworkConfig struct {
 	Name       string                `yaml:"name,omitempty"`
+	Version    string                `yaml:"version,omitempty"`
 	Channels   map[string]*Channel   `yaml:"channels,omitempty"`
 	Nodes      map[string]*Node      `yaml:"nodes,omitempty"`
 	Chaincodes map[string]*Chaincode `yaml:"chaincodes,omitempty"`
