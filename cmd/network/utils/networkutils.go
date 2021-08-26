@@ -299,12 +299,9 @@ func UpgradeCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId,
 	if err != nil {
 		return err
 	}
-	for _, node := range peerNodes {
-		if err := sdk.UpdateCC(ccId, ccPath, ccVersion, channelId, node.OrgId, policy, initArgs, node.GetHostname()); err != nil {
-			return err
-		}
+	if err := sdk.UpdateCC(ccId, ccPath, ccVersion, channelId, peerNodes[0].OrgId, policy, initArgs, peerNodes[0].GetHostname()); err != nil {
+		return err
 	}
-
 	return nil
 }
 
@@ -345,6 +342,9 @@ func upgradeCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccP
 	case fabricconfig.FabricVersion_V20:
 		fmt.Println("NOT SUPPORT")
 	default:
+		if err := InstallCC(nc, ccId, ccPath, ccVersion, channelId, sdk); err != nil {
+			return err
+		}
 		if err := UpgradeCC(nc, ccId, ccPath, ccVersion, channelId, ccPolicy, ccInitParam, initRequired, sdk); err != nil {
 			return err
 		}
