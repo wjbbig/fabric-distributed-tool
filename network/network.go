@@ -121,12 +121,7 @@ func (nc *NetworkConfig) ExtendChannelChaincode(dataDir, channelId, ccId, ccPath
 		Sequence: 1,
 	})
 	nc.Channels[channelId] = channel
-	data, err := yaml.Marshal(nc)
-	if err != nil {
-		return errors.Wrapf(err, "yaml marshal failed")
-	}
-	filePath := filepath.Join(dataDir, defaultNetworkConfigName)
-	return utils.WriteFile(filePath, data, 0755)
+	return writeNetworkConfig(dataDir, nc)
 }
 
 func (nc *NetworkConfig) UpgradeChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam string, initRequired bool) error {
@@ -157,13 +152,7 @@ func (nc *NetworkConfig) UpgradeChaincode(dataDir, channelId, ccId, ccPath, ccVe
 			break
 		}
 	}
-
-	data, err := yaml.Marshal(nc)
-	if err != nil {
-		return errors.Wrapf(err, "yaml marshal failed")
-	}
-	filePath := filepath.Join(dataDir, defaultNetworkConfigName)
-	return utils.WriteFile(filePath, data, 0755)
+	return writeNetworkConfig(dataDir, nc)
 }
 
 func (nc *NetworkConfig) ExtendChannel(dataDir, channelId, consensus string, peers, orderers []string) error {
@@ -189,13 +178,33 @@ func (nc *NetworkConfig) ExtendChannel(dataDir, channelId, consensus string, pee
 		Orderers:  orderers,
 	}
 	nc.Channels[channelId] = channel
+	return writeNetworkConfig(dataDir, nc)
+}
 
-	data, err := yaml.Marshal(nc)
-	if err != nil {
-		return errors.Wrapf(err, "yaml marshal failed")
+func (nc *NetworkConfig) ExtendNode(dataDir string, couchdb bool, peers, orderers []string) error {
+	for _, peer := range peers {
+		node, err := NewNode(peer, PeerNode, couchdb)
+		if err != nil {
+			return err
+		}
+		_, exist := nc.Nodes[node.hostname]
+		if exist {
+			return errors.Errorf("peer %s exists", node.hostname)
+		}
+		nc.Nodes[node.hostname] = node
 	}
-	filePath := filepath.Join(dataDir, defaultNetworkConfigName)
-	return utils.WriteFile(filePath, data, 0755)
+	for _, orderer := range orderers {
+		node, err := NewNode(orderer, OrdererNode, false)
+		if err != nil {
+			return err
+		}
+		_, exist := nc.Nodes[node.hostname]
+		if exist {
+			return errors.Errorf("orderer %s exists", node.hostname)
+		}
+		nc.Nodes[node.hostname] = node
+	}
+	return writeNetworkConfig(dataDir, nc)
 }
 
 func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string) (*NetworkConfig, error) {
@@ -238,15 +247,22 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 	channels[channelId] = channel
 	network.Channels = channels
 	network.Nodes = nodes
-	data, err := yaml.Marshal(network)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to yaml marshal network config")
-	}
-	filePath := filepath.Join(fileDir, defaultNetworkConfigName)
-	if err := ioutil.WriteFile(filePath, data, 0755); err != nil {
-		return nil, errors.Wrap(err, "failed to write networkconfig.yaml")
+	if err := writeNetworkConfig(fileDir, network); err != nil {
+		return nil, err
 	}
 	return network, nil
+}
+
+func writeNetworkConfig(dataDir string, nc *NetworkConfig) error {
+	filePath := filepath.Join(dataDir, defaultNetworkConfigName)
+	data, err := yaml.Marshal(nc)
+	if err != nil {
+		return errors.Wrapf(err, "yaml marshal failed")
+	}
+	if err := utils.WriteFile(filePath, data, 0755); err != nil {
+		return errors.Wrapf(err, "write network config file failed")
+	}
+	return nil
 }
 
 func UnmarshalNetworkConfig(fileDir string) (*NetworkConfig, error) {

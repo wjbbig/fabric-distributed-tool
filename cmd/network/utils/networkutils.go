@@ -560,3 +560,19 @@ func DoCreateChannelCommand(dataDir, channelId, consensus string, peers, orderer
 	}
 	return nil
 }
+
+func DoExtendNodeCommand(dataDir string, couchdb bool, peers, orderers []string) error {
+	// extend network config file
+	nc, err := network.UnmarshalNetworkConfig(dataDir)
+	if err != nil {
+		return err
+	}
+	if err := nc.ExtendNode(dataDir, couchdb, peers, orderers); err != nil {
+		return err
+	}
+	// extend crypto-config file
+
+	// generate keypairs and certs
+
+	return nil
+}
