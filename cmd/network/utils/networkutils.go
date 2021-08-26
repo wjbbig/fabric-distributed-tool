@@ -179,6 +179,26 @@ func TransferFilesByPeerName(sshUtil *sshutil.SSHUtil, dataDir string) error {
 	return nil
 }
 
+func TransferNewChannelFiles(dataDir string, channelId string, sshUtil *sshutil.SSHUtil, nc *network.NetworkConfig) error {
+	channelTxPath := filepath.Join(dataDir, "channel-artifacts", fmt.Sprintf("%s.tx", channelId))
+	peerNodes, ordererNodes, err := nc.GetNodesByChannel(channelId)
+	if err != nil {
+		return err
+	}
+	sshClients := sshUtil.Clients()
+	for _, node := range peerNodes {
+		if err := sshClients[node.GetHostname()].Sftp(channelTxPath, channelTxPath); err != nil {
+			return err
+		}
+	}
+	for _, node := range ordererNodes {
+		if err := sshClients[node.GetHostname()].Sftp(channelTxPath, channelTxPath); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func StartupNetwork(sshUtil *sshutil.SSHUtil, dataDir string) error {
 	logger.Info("begin to start network")
 	for name, client := range sshUtil.Clients() {
@@ -493,6 +513,49 @@ func DoShutdownCommand(dataDir string) error {
 	}
 	defer sshUtil.CloseAll()
 	if err := ShutdownNetwork(sshUtil, dataDir); err != nil {
+		return err
+	}
+	return nil
+}
+
+func DoCreateChannelCommand(dataDir, channelId, consensus string, peers, orderers []string) error {
+	nc, err := network.UnmarshalNetworkConfig(dataDir)
+	if err != nil {
+		return err
+	}
+	if err := nc.ExtendChannel(dataDir, channelId, consensus, peers, orderers); err != nil {
+		return err
+	}
+	profile, err := connectionprofile.UnmarshalConnectionProfile(dataDir)
+	if err != nil {
+		return err
+	}
+	if err := profile.ExtendChannel(dataDir, channelId, peers); err != nil {
+		return err
+	}
+	if err := fabricconfig.GenerateChannelTxAndAnchorPeer(dataDir, channelId, nc); err != nil {
+		return err
+	}
+	sshUtil, err := ReadSSHConfigFromNetwork(nc)
+	if err != nil {
+		return err
+	}
+	defer sshUtil.CloseAll()
+	if err := TransferNewChannelFiles(dataDir, channelId, sshUtil, nc); err != nil {
+		return err
+	}
+	sdk, err := sdkutil.NewFabricSDKDriver(filepath.Join(dataDir, connectionConfigFileName))
+	if err != nil {
+		return err
+	}
+	defer sdk.Close()
+
+	// create channel
+	if err := CreateChannel(nc, dataDir, channelId, sdk); err != nil {
+		return err
+	}
+	// join channel
+	if err := JoinChannel(nc, channelId, sdk); err != nil {
 		return err
 	}
 	return nil

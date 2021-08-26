@@ -466,6 +466,7 @@ func GenerateGenesisBlockAndChannelTxAndAnchorPeerUsingBinary(fileDir string, ch
 	return nil
 }
 
+// GenerateGenesisBlockAndChannelTxAndAnchorPeer uses to boostrap a new fabric network
 func GenerateGenesisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId string, nc *network.NetworkConfig) error {
 	// generate genesis.block
 	channelArtifactsPath := filepath.Join(fileDir, "channel-artifacts")
@@ -479,10 +480,18 @@ func GenerateGenesisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId str
 	if err := doOutputBlock(profileConfig, defaultGenesisChannel, outputBlockPath); err != nil {
 		return err
 	}
+	return GenerateChannelTxAndAnchorPeer(fileDir, channelId, nc)
+}
 
+// GenerateChannelTxAndAnchorPeer uses to create a new channel in an existing fabric network
+func GenerateChannelTxAndAnchorPeer(fileDir string, channelId string, nc *network.NetworkConfig) error {
+	channelArtifactsPath := filepath.Join(fileDir, "channel-artifacts")
+	if err := os.MkdirAll(channelArtifactsPath, 0755); err != nil {
+		return errors.Wrapf(err, "failed to create directory, path=%s", channelArtifactsPath)
+	}
 	// generate channel transaction
 	logger.Infof("begin to generate channel.tx, channel=%s", channelId)
-	profileConfig = genesisconfig.Load(defaultChannelProfileName, fileDir)
+	profileConfig := genesisconfig.Load(defaultChannelProfileName, fileDir)
 	outputChannelCreateTxPath := filepath.Join(channelArtifactsPath, fmt.Sprintf("%s.tx", channelId))
 	if err := doOutputChannelCreateTx(profileConfig, channelId, outputChannelCreateTxPath); err != nil {
 		return err
@@ -501,11 +510,12 @@ func GenerateGenesisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId str
 	for org := range peerOrgs {
 		logger.Infof("begin to generate anchors.tx, org=%s", org)
 		profileConfig = genesisconfig.Load(defaultChannelProfileName, fileDir)
-		outputAnchorPeersUpdatePath := filepath.Join(channelArtifactsPath, fmt.Sprintf("%sanchors.tx", org))
+		outputAnchorPeersUpdatePath := filepath.Join(channelArtifactsPath, fmt.Sprintf("%s_%sanchors.tx", channelId, org))
 		if err := doOutputAnchorPeersUpdate(profileConfig, channelId, outputAnchorPeersUpdatePath, org); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 

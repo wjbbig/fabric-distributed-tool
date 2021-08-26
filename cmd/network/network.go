@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/chaincode/deploycc"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/chaincode/upgradecc"
+	"github.com/wjbbig/fabric-distributed-tool/cmd/network/channel/createchannel"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/generate"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/shutdown"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/startup"
@@ -25,4 +26,5 @@ func init() {
 	networkCmd.AddCommand(shutdown.Cmd())
 	networkCmd.AddCommand(deploycc.Cmd())
 	networkCmd.AddCommand(upgradecc.Cmd())
+	networkCmd.AddCommand(createchannel.Cmd())
 }

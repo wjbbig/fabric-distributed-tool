@@ -166,6 +166,38 @@ func (nc *NetworkConfig) UpgradeChaincode(dataDir, channelId, ccId, ccPath, ccVe
 	return utils.WriteFile(filePath, data, 0755)
 }
 
+func (nc *NetworkConfig) ExtendChannel(dataDir, channelId, consensus string, peers, orderers []string) error {
+	_, exist := nc.Channels[channelId]
+	if exist {
+		return errors.Errorf("channel %s exists", channelId)
+	}
+	for _, peer := range peers {
+		_, exist := nc.Nodes[peer]
+		if !exist {
+			return errors.Errorf("peer %s does not exist", peer)
+		}
+	}
+	for _, orderer := range orderers {
+		_, exist := nc.Nodes[orderer]
+		if !exist {
+			return errors.Errorf("orderer %s does not exist", orderer)
+		}
+	}
+	channel := &Channel{
+		Consensus: consensus,
+		Peers:     peers,
+		Orderers:  orderers,
+	}
+	nc.Channels[channelId] = channel
+
+	data, err := yaml.Marshal(nc)
+	if err != nil {
+		return errors.Wrapf(err, "yaml marshal failed")
+	}
+	filePath := filepath.Join(dataDir, defaultNetworkConfigName)
+	return utils.WriteFile(filePath, data, 0755)
+}
+
 func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string) (*NetworkConfig, error) {
 	network := &NetworkConfig{}
 

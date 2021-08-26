@@ -1,0 +1,51 @@
+package createchannel
+
+import (
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/wjbbig/fabric-distributed-tool/cmd/network/utils"
+	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
+)
+
+var logger = mylogger.NewLogger()
+
+var (
+	dataDir   string
+	peers     []string
+	orderers  []string
+	channelId string
+	consensus string
+)
+
+var createChannelCmd = &cobra.Command{
+	Use:   "createchannel",
+	Short: "Create a new channel in the specified fabric network.",
+	Long:  "Create a new channel in the specified fabric network, only support existing peer or orderer.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := utils.DoCreateChannelCommand(dataDir, channelId, consensus, peers, orderers); err != nil {
+			logger.Error(err.Error())
+		}
+		return nil
+	},
+}
+
+func Cmd() *cobra.Command {
+	createChannelCmd.Flags().AddFlagSet(flags)
+	return createChannelCmd
+}
+
+var flags *pflag.FlagSet
+
+func init() {
+	resetFlags()
+}
+
+func resetFlags() {
+	flags = &pflag.FlagSet{}
+	flags.StringVarP(&dataDir, "datadir", "d", "", "Path to file containing fabric needed")
+	// generate -p a -p b -p c
+	flags.StringArrayVarP(&peers, "peer", "p", nil, "Hostname of fabric peers")
+	flags.StringArrayVarP(&orderers, "orderer", "o", nil, "Hostname of fabric orderers")
+	flags.StringVarP(&channelId, "channelid", "c", "", "Fabric channel name")
+	flags.StringVarP(&consensus, "consensus", "C", "", "Orderer consensus type of fabric network")
+}
