@@ -52,11 +52,9 @@ func GenerateConfigtx(dataDir, consensus, channelId, fversion string, networkCon
 	return nil
 }
 
-func GenerateDockerCompose(dataDir string, networkConfig *network.NetworkConfig, couchdb bool) error {
-	peerNodes := networkConfig.GetPeerNodes()
-	ordererNodes := networkConfig.GetOrdererNodes()
+func GenerateDockerCompose(dataDir string, peerNodes, ordererNodes []*network.Node, couchdb bool) error {
 	peersByOrg := make(map[string][]*network.Node)
-	for _, peerNode := range networkConfig.GetPeerNodes() {
+	for _, peerNode := range peerNodes {
 		peersByOrg[peerNode.OrgId] = append(peersByOrg[peerNode.OrgId], peerNode)
 	}
 	for _, peer := range peerNodes {
@@ -386,7 +384,7 @@ func DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId
 	if err := GenerateConfigtx(dataDir, consensus, channelId, fVersion, networkConfig); err != nil {
 		return err
 	}
-	if err := GenerateDockerCompose(dataDir, networkConfig, ifCouchdb); err != nil {
+	if err := GenerateDockerCompose(dataDir, networkConfig.GetPeerNodes(), networkConfig.GetOrdererNodes(), ifCouchdb); err != nil {
 		return err
 	}
 	if err := GenerateConnectionProfile(dataDir, channelId, networkConfig); err != nil {
@@ -567,12 +565,24 @@ func DoExtendNodeCommand(dataDir string, couchdb bool, peers, orderers []string)
 	if err != nil {
 		return err
 	}
-	if err := nc.ExtendNode(dataDir, couchdb, peers, orderers); err != nil {
+
+	newPeerNodes, newOrdererNodes, err := nc.ExtendNode(dataDir, couchdb, peers, orderers)
+	if err != nil {
 		return err
 	}
 	// extend crypto-config file
-
+	if err := fabricconfig.ExtendCryptoConfigFile(dataDir, newPeerNodes, newOrdererNodes); err != nil {
+		return err
+	}
 	// generate keypairs and certs
+	if err := fabricconfig.ExtendKeyPairsAndCerts(dataDir); err != nil {
+		return err
+	}
+	// generate docker-compose file
+	if err := GenerateDockerCompose(dataDir, newPeerNodes, newOrdererNodes, couchdb); err != nil {
+		return err
+	}
+	// update connection-profile
 
 	return nil
 }

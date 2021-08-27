@@ -181,30 +181,32 @@ func (nc *NetworkConfig) ExtendChannel(dataDir, channelId, consensus string, pee
 	return writeNetworkConfig(dataDir, nc)
 }
 
-func (nc *NetworkConfig) ExtendNode(dataDir string, couchdb bool, peers, orderers []string) error {
+func (nc *NetworkConfig) ExtendNode(dataDir string, couchdb bool, peers, orderers []string) (peerNodes []*Node, ordererNodes []*Node, err error) {
 	for _, peer := range peers {
 		node, err := NewNode(peer, PeerNode, couchdb)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		_, exist := nc.Nodes[node.hostname]
 		if exist {
-			return errors.Errorf("peer %s exists", node.hostname)
+			return nil, nil, errors.Errorf("peer %s exists", node.hostname)
 		}
 		nc.Nodes[node.hostname] = node
+		peerNodes = append(peerNodes, node)
 	}
 	for _, orderer := range orderers {
 		node, err := NewNode(orderer, OrdererNode, false)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		_, exist := nc.Nodes[node.hostname]
 		if exist {
-			return errors.Errorf("orderer %s exists", node.hostname)
+			return nil, nil, errors.Errorf("orderer %s exists", node.hostname)
 		}
 		nc.Nodes[node.hostname] = node
+		ordererNodes = append(ordererNodes, node)
 	}
-	return writeNetworkConfig(dataDir, nc)
+	return peerNodes, ordererNodes, writeNetworkConfig(dataDir, nc)
 }
 
 func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string) (*NetworkConfig, error) {

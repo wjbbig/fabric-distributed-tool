@@ -139,7 +139,7 @@ func GenerateCryptoConfigFile(filePath string, peers, orderers []*network.Node) 
 	return nil
 }
 
-func ExtendCryptoConfigFile(filePath string, peers, orderers []string) error {
+func ExtendCryptoConfigFile(filePath string, peers, orderers []*network.Node) error {
 	logger.Info("begin to extend crypto-config.yaml")
 	path := filepath.Join(filePath, defaultCryptoConfigFileName)
 	data, err := ioutil.ReadFile(path)
@@ -152,39 +152,37 @@ func ExtendCryptoConfigFile(filePath string, peers, orderers []string) error {
 	}
 
 	ordererMap := make(map[string]cryptoNodeConfig)
-	for _, ordererUrl := range orderers {
-		ordererName, ordererOrg, ordererDomain := utils.SplitNameOrgDomain(ordererUrl)
-		oc, ok := ordererMap[ordererDomain]
+	for _, ordererNode := range orderers {
+		oc, ok := ordererMap[ordererNode.Domain]
 		if !ok {
-			ordererMap[ordererDomain] = cryptoNodeConfig{
-				Name:          ordererOrg,
-				Domain:        ordererDomain,
+			ordererMap[ordererNode.Domain] = cryptoNodeConfig{
+				Name:          ordererNode.OrgId,
+				Domain:        ordererNode.Domain,
 				EnableNodeOUs: true,
-				Specs:         []cryptoSpec{{Hostname: ordererName}},
+				Specs:         []cryptoSpec{{Hostname: ordererNode.GetHostname()}},
 			}
 		} else {
-			oc.Specs = append(oc.Specs, cryptoSpec{Hostname: ordererName})
-			ordererMap[ordererDomain] = oc
+			oc.Specs = append(oc.Specs, cryptoSpec{Hostname: ordererNode.GetHostname()})
+			ordererMap[ordererNode.Domain] = oc
 		}
 	}
 	for _, config := range ordererMap {
 		cryptoConfig.OrdererOrgs = append(cryptoConfig.OrdererOrgs, config)
 	}
 	peerMap := make(map[string]cryptoNodeConfig)
-	for _, peerUrl := range peers {
-		peerName, peerOrg, peerDomain := utils.SplitNameOrgDomain(peerUrl)
-		pc, ok := peerMap[peerDomain]
+	for _, peerNode := range peers {
+		pc, ok := peerMap[peerNode.Domain]
 		if !ok {
-			peerMap[peerDomain] = cryptoNodeConfig{
-				Name:          peerOrg,
-				Domain:        peerDomain,
+			peerMap[peerNode.Domain] = cryptoNodeConfig{
+				Name:          peerNode.OrgId,
+				Domain:        peerNode.Domain,
 				EnableNodeOUs: true,
-				Specs:         []cryptoSpec{{Hostname: peerName}},
+				Specs:         []cryptoSpec{{Hostname: peerNode.GetHostname()}},
 				Users:         cryptoUsers{Count: 1},
 			}
 		} else {
-			pc.Specs = append(pc.Specs, cryptoSpec{Hostname: peerName})
-			peerMap[peerDomain] = pc
+			pc.Specs = append(pc.Specs, cryptoSpec{Hostname: peerNode.GetHostname()})
+			peerMap[peerNode.Domain] = pc
 		}
 	}
 	for _, config := range peerMap {
@@ -195,7 +193,7 @@ func ExtendCryptoConfigFile(filePath string, peers, orderers []string) error {
 	if err != nil {
 		return err
 	}
-	if err := ioutil.WriteFile(path, data, 0755); err != nil {
+	if err := utils.WriteFile(path, data, 0755); err != nil {
 		return err
 	}
 	logger.Info("finish extending crypto-config.yaml")
@@ -562,7 +560,7 @@ func extendOrdererOrg(fileDir string, orgSpec cryptoNodeConfig) error {
 	tlscaDir := filepath.Join(orgDir, "tlsca")
 	orderersDir := filepath.Join(orgDir, "orderers")
 	if _, err := os.Stat(orgDir); os.IsNotExist(err) {
-		if err := generatePeerOrg(fileDir, orgSpec); err != nil {
+		if err := generateOrdererOrg(fileDir, orgSpec); err != nil {
 			return err
 		}
 	}

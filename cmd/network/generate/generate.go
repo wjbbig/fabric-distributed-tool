@@ -1,7 +1,6 @@
 package generate
 
 import (
-	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/utils"
@@ -76,10 +75,11 @@ var (
 			case bootstrap:
 				if err := utils.DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy, ccInitRequired, ccSequence, ifCouchdb, peerUrls, ordererUrls, fabricVersion); err != nil {
 					logger.Error(err.Error())
-					return nil
 				}
 			case extend:
-				fmt.Println("extend")
+				if err := utils.DoExtendNodeCommand(dataDir, ifCouchdb, peerUrls, ordererUrls); err != nil {
+					logger.Error(err.Error())
+				}
 			default:
 				logger.Error("bootstrap or extend must be chosen one")
 			}
