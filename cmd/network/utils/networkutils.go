@@ -583,6 +583,12 @@ func DoExtendNodeCommand(dataDir string, couchdb bool, peers, orderers []string)
 		return err
 	}
 	// update connection-profile
-
+	profile, err := connectionprofile.UnmarshalConnectionProfile(dataDir)
+	if err != nil {
+		return err
+	}
+	if err := profile.ExtendNodesAndOrgs(dataDir, newPeerNodes, newOrdererNodes); err != nil {
+		return err
+	}
 	return nil
 }

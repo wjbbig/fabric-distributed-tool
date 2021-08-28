@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
+	"github.com/wjbbig/fabric-distributed-tool/network"
 	"github.com/wjbbig/fabric-distributed-tool/utils"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -259,7 +260,6 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 			LedgerQuery:    true,
 			EventSource:    true,
 		}
-
 		// organization
 		org, exist := organizations[orgName]
 		if exist {
@@ -378,6 +378,84 @@ func (profile *ConnProfile) ExtendChannel(dataDir, channelId string, peers []str
 	filePath := filepath.Join(dataDir, defaultConnProfileName)
 	if err := utils.WriteFile(filePath, data, 0755); err != nil {
 		return errors.Wrap(err, "failed to write connection profile")
+	}
+	return nil
+}
+
+func (profile *ConnProfile) ExtendNodesAndOrgs(dataDir string, peers, orderers []*network.Node) error {
+
+	for _, node := range peers {
+		peer := &Peer{
+			URL: fmt.Sprintf("%s:%d", node.GetHostname(), node.NodePort),
+			GRPCOptions: &GRPCOptions{
+				SSLTargetNameOverride: node.GetHostname(),
+				KeepAliveTime:         "0s",
+				KeepAliveTimeout:      "20s",
+			},
+			TLSCACerts: &TLSCACert{Path: filepath.Join(dataDir, defaultCryptoConfigDirName, "peerOrganizations", node.Domain,
+				"tlsca", fmt.Sprintf("tlsca.%s-cert.pem", node.Domain))},
+		}
+		profile.Peers[node.GetHostname()] = peer
+
+		peerEntityMatcher := &EntityMatcher{
+			Pattern:                             node.GetHostname(),
+			UrlSubstitutionExp:                  fmt.Sprintf("%s:%d", node.Host, node.NodePort),
+			SSLTargetOverrideUrlSubstitutionExp: node.GetHostname(),
+			MappedHost:                          node.GetHostname(),
+		}
+
+		profile.EntityMatchers["peer"] = append(profile.EntityMatchers["peer"], peerEntityMatcher)
+
+		org, exist := profile.Organizations[node.OrgId]
+		if !exist {
+			org := &Organization{
+				MSPId:      node.OrgId,
+				CryptoPath: fmt.Sprintf("peerOrganizations/%[1]s/users/{username}@%[1]s/msp", node.Domain),
+				Peers:      []string{node.GetHostname()},
+			}
+			profile.Organizations[node.OrgId] = org
+		} else {
+			org.Peers = append(org.Peers, node.GetHostname())
+		}
+	}
+	for _, node := range orderers {
+		orderer := &Orderer{
+			URL: fmt.Sprintf("%s:%d", node.GetHostname(), node.NodePort),
+			GRPCOptions: &GRPCOptions{
+				SSLTargetNameOverride: node.GetHostname(),
+				KeepAliveTime:         "0s",
+				KeepAliveTimeout:      "20s",
+			},
+			TLSCACerts: &TLSCACert{Path: filepath.Join(dataDir, defaultCryptoConfigDirName, "ordererOrganizations", node.Domain,
+				"tlsca", fmt.Sprintf("tlsca.%s-cert.pem", node.Domain))},
+		}
+		profile.Orderers[node.GetHostname()] = orderer
+
+		ordererEntityMatcher := &EntityMatcher{
+			Pattern:                             node.GetHostname(),
+			UrlSubstitutionExp:                  fmt.Sprintf("%s:%d", node.Host, node.NodePort),
+			SSLTargetOverrideUrlSubstitutionExp: node.GetHostname(),
+			MappedHost:                          node.GetHostname(),
+		}
+
+		profile.EntityMatchers["orderer"] = append(profile.EntityMatchers["orderer"], ordererEntityMatcher)
+
+		_, exist := profile.Organizations[node.OrgId]
+		if !exist {
+			org := &Organization{
+				MSPId:      node.OrgId,
+				CryptoPath: fmt.Sprintf("ordererOrganizations/%[1]s/users/{username}@%[1]s/msp", node.Domain),
+			}
+			profile.Organizations[node.OrgId] = org
+		}
+	}
+	data, err := yaml.Marshal(profile)
+	if err != nil {
+		return errors.Wrap(err, "yaml marshal failed")
+	}
+	filePath := filepath.Join(dataDir, defaultConnProfileName)
+	if err := utils.WriteFile(filePath, data, 0755); err != nil {
+		return errors.Wrap(err, "write file failed")
 	}
 	return nil
 }
