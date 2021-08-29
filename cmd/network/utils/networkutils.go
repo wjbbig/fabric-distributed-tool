@@ -249,27 +249,37 @@ func startupNode(dataDir, name string, client *sshutil.SSHClient) error {
 
 func ShutdownNetwork(sshUtil *sshutil.SSHUtil, dataDir string) error {
 	for name, client := range sshUtil.Clients() {
-		dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
-		// shutdown nodes
+		if err := stopNodeByNodeName(dataDir, client, name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func stopNodeByNodeName(dataDir string, client *sshutil.SSHClient, name string) error {
+	if client == nil {
+		return errors.Errorf("node %s does not exist", name)
+	}
+	dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
+	// shutdown nodes
+	if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s down -v", dockerComposeFilePath)); err != nil {
+		logger.Info(err.Error())
+	}
+
+	// delete couchdb container
+	if client.NeedCouch {
+		dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-couchdb.yaml", strings.ReplaceAll(name, ".", "-")))
 		if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s down -v", dockerComposeFilePath)); err != nil {
 			logger.Info(err.Error())
 		}
-
-		// delete couchdb container
-		if client.NeedCouch {
-			dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-couchdb.yaml", strings.ReplaceAll(name, ".", "-")))
-			if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s down -v", dockerComposeFilePath)); err != nil {
-				logger.Info(err.Error())
-			}
-		}
-
-		// TODO: delete chaincode container and image
-		// if client.NodeType == network.PeerNode {
-		// 	if err := client.RunCmd("docker rm -f $(docker ps -a -q |  grep \"dev*\"  | awk '{print $1}')"); err != nil {
-		// 		logger.Info(err.Error())
-		// 	}
-		// }
 	}
+
+	// TODO: delete chaincode container and image
+	// if client.NodeType == network.PeerNode {
+	// 	if err := client.RunCmd("docker rm -f $(docker ps -a -q |  grep \"dev*\"  | awk '{print $1}')"); err != nil {
+	// 		logger.Info(err.Error())
+	// 	}
+	// }
 	return nil
 }
 
@@ -646,7 +656,21 @@ func DoStartNodeCmd(dataDir string, nodeNames ...string) error {
 	return nil
 }
 
-func DoStopNodeCmd(dataDir, nodeName string) error {
-
+func DoStopNodeCmd(dataDir string, nodeNames ...string) error {
+	nc, err := network.UnmarshalNetworkConfig(dataDir)
+	if err != nil {
+		return err
+	}
+	sshUtil, err := ReadSSHConfigFromNetwork(nc)
+	if err != nil {
+		return err
+	}
+	defer sshUtil.CloseAll()
+	for _, name := range nodeNames {
+		client := sshUtil.GetClientByName(name)
+		if err := stopNodeByNodeName(dataDir, client, name); err != nil {
+			return err
+		}
+	}
 	return nil
 }
