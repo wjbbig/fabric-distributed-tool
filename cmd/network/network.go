@@ -6,6 +6,7 @@ import (
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/chaincode/upgradecc"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/channel/createchannel"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/generate"
+	"github.com/wjbbig/fabric-distributed-tool/cmd/network/node/startnode"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/shutdown"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/startup"
 )
@@ -26,5 +27,6 @@ func init() {
 	networkCmd.AddCommand(shutdown.Cmd())
 	networkCmd.AddCommand(deploycc.Cmd())
 	networkCmd.AddCommand(upgradecc.Cmd())
+	networkCmd.AddCommand(startnode.Cmd())
 	networkCmd.AddCommand(createchannel.Cmd())
 }

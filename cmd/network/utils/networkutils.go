@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"path/filepath"
 	"strings"
 	"time"
@@ -141,37 +142,57 @@ func ReadSSHConfigFromNetwork(networkConfig *network.NetworkConfig) (*sshutil.SS
 	return sshUtil, nil
 }
 
-func TransferFilesByPeerName(sshUtil *sshutil.SSHUtil, dataDir string) error {
+func TransferFilesByNodeName(sshUtil *sshutil.SSHUtil, dataDir string, nodes []string) error {
+	for _, node := range nodes {
+		client := sshUtil.GetClientByName(node)
+		if client == nil {
+			return errors.Errorf("node %s does not exist", node)
+		}
+		if err := transferFiles(client, node, dataDir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func TransferFilesAllNodes(sshUtil *sshutil.SSHUtil, dataDir string) error {
+	for name, client := range sshUtil.Clients() {
+		if err := transferFiles(client, name, dataDir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func transferFiles(sshClient *sshutil.SSHClient, nodeName, dataDir string) error {
 	ordererCryptoConfigPrefix := filepath.Join(dataDir, "crypto-config", "ordererOrganizations")
 	peerCryptoConfigPrefix := filepath.Join(dataDir, "crypto-config", "peerOrganizations")
-	for name, client := range sshUtil.Clients() {
-		_, orgName, _ := utils.SplitNameOrgDomain(name)
-		// send node self keypairs and certs
-		var certDir string
-		if client.NodeType == network.PeerNode {
-			certDir = filepath.Join(peerCryptoConfigPrefix, orgName)
-		} else {
-			certDir = filepath.Join(ordererCryptoConfigPrefix, orgName)
-		}
-		err := client.Sftp(certDir, certDir)
-		if err != nil {
-			return err
-		}
-		// send genesis.block, channel.tx and anchor.tx
-		channelArtifactsPath := filepath.Join(dataDir, "channel-artifacts")
-		if err = client.Sftp(channelArtifactsPath, channelArtifactsPath); err != nil {
-			return err
-		}
+	_, orgName, _ := utils.SplitNameOrgDomain(nodeName)
+	// send node self keypairs and certs
+	var certDir string
+	if sshClient.NodeType == network.PeerNode {
+		certDir = filepath.Join(peerCryptoConfigPrefix, orgName)
+	} else {
+		certDir = filepath.Join(ordererCryptoConfigPrefix, orgName)
+	}
+	err := sshClient.Sftp(certDir, certDir)
+	if err != nil {
+		return err
+	}
+	// send genesis.block, channel.tx and anchor.tx
+	channelArtifactsPath := filepath.Join(dataDir, "channel-artifacts")
+	if err = sshClient.Sftp(channelArtifactsPath, channelArtifactsPath); err != nil {
+		return err
+	}
 
-		dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
-		if err = client.Sftp(dockerComposeFilePath, dataDir); err != nil {
+	dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(nodeName, ".", "-")))
+	if err = sshClient.Sftp(dockerComposeFilePath, dataDir); err != nil {
+		return err
+	}
+	if sshClient.NeedCouch {
+		dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-couchdb.yaml", strings.ReplaceAll(nodeName, ".", "-")))
+		if err = sshClient.Sftp(dockerComposeFilePath, dataDir); err != nil {
 			return err
-		}
-		if client.NeedCouch {
-			dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-couchdb.yaml", strings.ReplaceAll(name, ".", "-")))
-			if err = client.Sftp(dockerComposeFilePath, dataDir); err != nil {
-				return err
-			}
 		}
 	}
 	return nil
@@ -200,22 +221,29 @@ func TransferNewChannelFiles(dataDir string, channelId string, sshUtil *sshutil.
 func StartupNetwork(sshUtil *sshutil.SSHUtil, dataDir string) error {
 	logger.Info("begin to start network")
 	for name, client := range sshUtil.Clients() {
-		var dockerComposeFilePath string
-		if client.NeedCouch && client.NodeType == network.PeerNode {
-			// start couchdb first
-			dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-couchdb.yaml", strings.ReplaceAll(name, ".", "-")))
-			if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s up -d", dockerComposeFilePath)); err != nil {
-				logger.Info(err.Error())
-			}
+		if err := startupNode(dataDir, name, client); err != nil {
+			return err
 		}
-		dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
-		// start node
+	}
+	logger.Info("starting network complete!")
+	return nil
+}
+
+func startupNode(dataDir, name string, client *sshutil.SSHClient) error {
+	var dockerComposeFilePath string
+	if client.NeedCouch && client.NodeType == network.PeerNode {
+		// start couchdb first
+		dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-couchdb.yaml", strings.ReplaceAll(name, ".", "-")))
 		if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s up -d", dockerComposeFilePath)); err != nil {
 			logger.Info(err.Error())
 		}
-		// TODO start ca if chosen
 	}
-	logger.Info("starting network complete!")
+	dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
+	// start node
+	if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s up -d", dockerComposeFilePath)); err != nil {
+		logger.Info(err.Error())
+	}
+	// TODO start ca if chosen
 	return nil
 }
 
@@ -428,7 +456,7 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 	}
 	defer sshUtil.CloseAll()
 
-	if err := TransferFilesByPeerName(sshUtil, dataDir); err != nil {
+	if err := TransferFilesAllNodes(sshUtil, dataDir); err != nil {
 		return err
 	}
 	if err := StartupNetwork(sshUtil, dataDir); err != nil {
@@ -590,5 +618,35 @@ func DoExtendNodeCommand(dataDir string, couchdb bool, peers, orderers []string)
 	if err := profile.ExtendNodesAndOrgs(dataDir, newPeerNodes, newOrdererNodes); err != nil {
 		return err
 	}
+	return nil
+}
+
+func DoStartNodeCmd(dataDir string, nodeNames ...string) error {
+	nc, err := network.UnmarshalNetworkConfig(dataDir)
+	if err != nil {
+		return err
+	}
+	sshUtil, err := ReadSSHConfigFromNetwork(nc)
+	if err != nil {
+		return err
+	}
+	defer sshUtil.CloseAll()
+	// transfer docker-compose files
+	if err := TransferFilesByNodeName(sshUtil, dataDir, nodeNames); err != nil {
+		return err
+	}
+	// start nodes
+	for _, name := range nodeNames {
+		// we don't need to check nil for the client, since TransferFilesByNodeName has done it
+		client := sshUtil.GetClientByName(name)
+		if err := startupNode(dataDir, name, client); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func DoStopNodeCmd(dataDir, nodeName string) error {
+
 	return nil
 }

@@ -36,6 +36,10 @@ func (su *SSHUtil) Clients() map[string]*SSHClient {
 	return su.remoteClients
 }
 
+func (su *SSHUtil) GetClientByName(name string) *SSHClient {
+	return su.remoteClients[name]
+}
+
 func (su *SSHUtil) CloseAll() {
 	for _, client := range su.remoteClients {
 		client.Close()
@@ -43,13 +47,13 @@ func (su *SSHUtil) CloseAll() {
 }
 
 type SSHClient struct {
-	Username string
-	Password string
-	Address  string
-	NodeType string
+	Username  string
+	Password  string
+	Address   string
+	NodeType  string
 	NeedCouch bool
-	local    bool
-	client   *ssh.Client
+	local     bool
+	client    *ssh.Client
 }
 
 func newSSHClient(username, password, address, nodeType string, needCouchdb bool) (*SSHClient, error) {
@@ -58,12 +62,12 @@ func newSSHClient(username, password, address, nodeType string, needCouchdb bool
 		return nil, err
 	}
 	cli := &SSHClient{
-		Username: username,
-		Password: password,
-		Address:  address,
-		NodeType: nodeType,
+		Username:  username,
+		Password:  password,
+		Address:   address,
+		NodeType:  nodeType,
 		NeedCouch: needCouchdb,
-		local:    local,
+		local:     local,
 	}
 
 	if !local {

@@ -153,16 +153,24 @@ func ExtendCryptoConfigFile(filePath string, peers, orderers []*network.Node) er
 
 	ordererMap := make(map[string]cryptoNodeConfig)
 	for _, ordererNode := range orderers {
+		// check if org exists
+		for i, org := range cryptoConfig.OrdererOrgs {
+			if ordererNode.OrgId == org.Name {
+				org.Specs = append(org.Specs, cryptoSpec{Hostname: ordererNode.Name})
+				cryptoConfig.OrdererOrgs[i] = org
+				continue
+			}
+		}
 		oc, ok := ordererMap[ordererNode.Domain]
 		if !ok {
 			ordererMap[ordererNode.Domain] = cryptoNodeConfig{
 				Name:          ordererNode.OrgId,
 				Domain:        ordererNode.Domain,
 				EnableNodeOUs: true,
-				Specs:         []cryptoSpec{{Hostname: ordererNode.GetHostname()}},
+				Specs:         []cryptoSpec{{Hostname: ordererNode.Name}},
 			}
 		} else {
-			oc.Specs = append(oc.Specs, cryptoSpec{Hostname: ordererNode.GetHostname()})
+			oc.Specs = append(oc.Specs, cryptoSpec{Hostname: ordererNode.Name})
 			ordererMap[ordererNode.Domain] = oc
 		}
 	}
@@ -171,17 +179,25 @@ func ExtendCryptoConfigFile(filePath string, peers, orderers []*network.Node) er
 	}
 	peerMap := make(map[string]cryptoNodeConfig)
 	for _, peerNode := range peers {
+		// check if org exists
+		for i, org := range cryptoConfig.PeerOrgs {
+			if peerNode.OrgId == org.Name {
+				org.Specs = append(org.Specs, cryptoSpec{Hostname: peerNode.Name})
+				cryptoConfig.PeerOrgs[i] = org
+				continue
+			}
+		}
 		pc, ok := peerMap[peerNode.Domain]
 		if !ok {
 			peerMap[peerNode.Domain] = cryptoNodeConfig{
 				Name:          peerNode.OrgId,
 				Domain:        peerNode.Domain,
 				EnableNodeOUs: true,
-				Specs:         []cryptoSpec{{Hostname: peerNode.GetHostname()}},
+				Specs:         []cryptoSpec{{Hostname: peerNode.Name}},
 				Users:         cryptoUsers{Count: 1},
 			}
 		} else {
-			pc.Specs = append(pc.Specs, cryptoSpec{Hostname: peerNode.GetHostname()})
+			pc.Specs = append(pc.Specs, cryptoSpec{Hostname: peerNode.Name})
 			peerMap[peerNode.Domain] = pc
 		}
 	}
