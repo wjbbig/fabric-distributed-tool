@@ -8,10 +8,10 @@ import (
 )
 
 var (
-	logger  = mylogger.NewLogger()
-	dataDir string
-	name    string
-	flags   *pflag.FlagSet
+	logger    = mylogger.NewLogger()
+	dataDir   string
+	nodeNames []string
+	flags     *pflag.FlagSet
 )
 
 func init() {
@@ -22,7 +22,7 @@ func resetFlags() {
 	flags = &pflag.FlagSet{}
 	flags.StringVarP(&dataDir, "datadir", "d", "", "Path to file containing fabric needed")
 	// generate -p a -p b -p c
-	flags.StringVarP(&name, "name", "n", "", "Hostname of fabric node")
+	flags.StringArrayVarP(&nodeNames, "name", "n", nil, "Hostname of fabric node")
 }
 
 var startNodeCmd = &cobra.Command{
@@ -30,7 +30,7 @@ var startNodeCmd = &cobra.Command{
 	Short: "Start a node with the specified name",
 	Long:  "Start a node with the specified name",
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := utils.DoStartNodeCmd(dataDir, name); err != nil {
+		if err := utils.DoStartNodeCmd(dataDir, nodeNames...); err != nil {
 			logger.Error(err.Error())
 		}
 	},
