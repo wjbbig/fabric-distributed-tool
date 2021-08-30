@@ -21,7 +21,6 @@ func init() {
 func resetFlags() {
 	flags = &pflag.FlagSet{}
 	flags.StringVarP(&dataDir, "datadir", "d", "", "Path to file containing fabric needed")
-	// generate -p a -p b -p c
 	flags.StringArrayVarP(&nodeNames, "name", "n", nil, "Hostname of fabric node")
 }
 
