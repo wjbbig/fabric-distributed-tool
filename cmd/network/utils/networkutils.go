@@ -327,7 +327,7 @@ func joinChannelWithNodeName(nc *network.NetworkConfig, channelId, nodeName stri
 	// find an orderer
 	ordererEndpoint = ordererNodes[0].GetHostname()
 	node := nc.Nodes[nodeName]
-	if err := sdk.JoinChannel(channelId, node.OrgId, ordererEndpoint, node.GetHostname()); err != nil {
+	if err := sdk.JoinChannel(channelId, node.OrgId, ordererEndpoint, nodeName); err != nil {
 		return err
 	}
 	return nil
