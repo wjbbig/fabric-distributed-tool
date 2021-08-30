@@ -318,6 +318,21 @@ func JoinChannel(nc *network.NetworkConfig, channelId string, sdk *sdkutil.Fabri
 	return nil
 }
 
+func joinChannelWithNodeName(nc *network.NetworkConfig, channelId, nodeName string, sdk *sdkutil.FabricSDKDriver) error {
+	var ordererEndpoint string
+	_, ordererNodes, err := nc.GetNodesByChannel(channelId)
+	if err != nil {
+		return err
+	}
+	// find an orderer
+	ordererEndpoint = ordererNodes[0].GetHostname()
+	node := nc.Nodes[nodeName]
+	if err := sdk.JoinChannel(channelId, node.OrgId, ordererEndpoint, node.GetHostname()); err != nil {
+		return err
+	}
+	return nil
+}
+
 func InstallCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId string, sdk *sdkutil.FabricSDKDriver) error {
 	peerNodes, _, err := nc.GetNodesByChannel(channelId)
 	if err != nil {
@@ -671,6 +686,23 @@ func DoStopNodeCmd(dataDir string, nodeNames ...string) error {
 		if err := stopNodeByNodeName(dataDir, client, name); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func DoExistOrgPeerJoinChannel(dataDir string, channelId, nodeName string) error {
+	nc, err := network.UnmarshalNetworkConfig(dataDir)
+	if err != nil {
+		return err
+	}
+	// join the channel using sdk
+	sdk, err := sdkutil.NewFabricSDKDriver(filepath.Join(dataDir, connectionConfigFileName))
+	if err != nil {
+		return err
+	}
+	defer sdk.Close()
+	if err := joinChannelWithNodeName(nc, channelId, nodeName, sdk); err != nil {
+		return err
 	}
 	return nil
 }

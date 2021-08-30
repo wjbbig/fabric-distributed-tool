@@ -5,6 +5,7 @@ import (
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/chaincode/deploycc"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/chaincode/upgradecc"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/channel/createchannel"
+	"github.com/wjbbig/fabric-distributed-tool/cmd/network/channel/joinchannel/existorgpeer"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/generate"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/node/startnode"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/node/stopnode"
@@ -30,5 +31,6 @@ func init() {
 	networkCmd.AddCommand(upgradecc.Cmd())
 	networkCmd.AddCommand(startnode.Cmd())
 	networkCmd.AddCommand(stopnode.Cmd())
+	networkCmd.AddCommand(existorgpeer.Cmd())
 	networkCmd.AddCommand(createchannel.Cmd())
 }
