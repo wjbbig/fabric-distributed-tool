@@ -392,9 +392,11 @@ func deployCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPa
 			return err
 		}
 		// InstantiateCC
-		if err := InstantiateCC(nc, ccId, ccPath, ccVersion, channelId,
-			ccPolicy, ccInitParam, sdk); err != nil {
-			return err
+		if initRequired {
+			if err := InstantiateCC(nc, ccId, ccPath, ccVersion, channelId,
+				ccPolicy, ccInitParam, sdk); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
