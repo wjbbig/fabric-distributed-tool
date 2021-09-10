@@ -503,6 +503,8 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 	if consensus == fabricconfig.OrdererType_ETCDRAFT {
 		logger.Info("sleeping 15s to allow etcdraft cluster to complete booting")
 		time.Sleep(time.Second * 15)
+	} else {
+		time.Sleep(time.Second * 5)
 	}
 
 	// create channel
@@ -703,6 +705,43 @@ func DoExistOrgPeerJoinChannel(dataDir string, channelId, nodeName string) error
 		return err
 	}
 	defer sdk.Close()
+	if err := joinChannelWithNodeName(nc, channelId, nodeName, sdk); err != nil {
+		return err
+	}
+	return nil
+}
+
+func DoNewOrgPeerJoinChannel(dataDir string, channelId, nodeName string) error {
+	nc, err := network.UnmarshalNetworkConfig(dataDir)
+	if err != nil {
+		return err
+	}
+	node := nc.GetNode(nodeName)
+	peerNodes, ordererNodes, err := nc.GetNodesByChannel(channelId)
+	if err != nil {
+		return err
+	}
+	ordererEndpoint := ordererNodes[0].GetHostname()
+	var existOrgs []string
+	for _, peerNode := range peerNodes {
+		existOrgs = append(existOrgs, peerNode.OrgId)
+	}
+	orgProfile := fabricconfig.GenerateOrgProfile(dataDir, node, nc.Version)
+	configGroup, err := fabricconfig.GenerateConfigGroup(orgProfile)
+	if err != nil {
+		return err
+	}
+
+	sdk, err := sdkutil.NewFabricSDKDriver(filepath.Join(dataDir, connectionConfigFileName))
+	if err != nil {
+		return err
+	}
+	defer sdk.Close()
+	if err = sdk.ExtendOrShrinkChannel("extend", channelId, node.OrgId, ordererEndpoint, existOrgs, configGroup); err != nil {
+		return err
+	}
+	// sleep 5s,
+	time.Sleep(5 * time.Second)
 	if err := joinChannelWithNodeName(nc, channelId, nodeName, sdk); err != nil {
 		return err
 	}

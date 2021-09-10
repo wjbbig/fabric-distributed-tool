@@ -6,6 +6,7 @@ import (
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/chaincode/upgradecc"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/channel/createchannel"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/channel/joinchannel/existorgpeer"
+	"github.com/wjbbig/fabric-distributed-tool/cmd/network/channel/joinchannel/neworgpeer"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/generate"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/node/startnode"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/node/stopnode"
@@ -24,13 +25,14 @@ func Cmd() *cobra.Command {
 }
 
 func init() {
-	networkCmd.AddCommand(generate.Cmd())
 	networkCmd.AddCommand(startup.Cmd())
+	networkCmd.AddCommand(generate.Cmd())
 	networkCmd.AddCommand(shutdown.Cmd())
 	networkCmd.AddCommand(deploycc.Cmd())
+	networkCmd.AddCommand(stopnode.Cmd())
 	networkCmd.AddCommand(upgradecc.Cmd())
 	networkCmd.AddCommand(startnode.Cmd())
-	networkCmd.AddCommand(stopnode.Cmd())
+	networkCmd.AddCommand(neworgpeer.Cmd())
 	networkCmd.AddCommand(existorgpeer.Cmd())
 	networkCmd.AddCommand(createchannel.Cmd())
 }

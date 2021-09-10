@@ -5,6 +5,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	cb "github.com/hyperledger/fabric-protos-go/common"
 	"github.com/hyperledger/fabric/common/channelconfig"
+	"github.com/hyperledger/fabric/msp"
 	"github.com/hyperledger/fabric/protoutil"
 	"github.com/wjbbig/fabric-distributed-tool/tools/configtxgen/encoder"
 	"github.com/wjbbig/fabric-distributed-tool/tools/configtxgen/genesisconfig"
@@ -203,7 +204,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 			},
 			fconfigtx.AdminsPolicyKey: {
 				Type: fconfigtx.ImplicitMetaPolicyType,
-				Rule: "ANY Admins",
+				Rule: "MAJORITY Admins",
 			},
 			fconfigtx.BlockValidationPolicyKey: {
 				Type: fconfigtx.ImplicitMetaPolicyType,
@@ -295,14 +296,10 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 			},
 			fconfigtx.AdminsPolicyKey: {
 				Type: fconfigtx.ImplicitMetaPolicyType,
-				Rule: "ANY Admins",
+				Rule: "MAJORITY Admins",
 			},
 		},
-		Capabilities: map[string]bool{
-			"V1_3": false,
-			"V1_2": false,
-			"V1_1": false,
-		},
+		Capabilities: make(map[string]bool),
 	}
 	if version == FabricVersion_V20 {
 		application.Policies[fconfigtx.EndorsementPolicyKey] = ConfigtxPolicy{
@@ -343,7 +340,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 					},
 					fconfigtx.AdminsPolicyKey: {
 						Type: fconfigtx.ImplicitMetaPolicyType,
-						Rule: "ANY Admins",
+						Rule: "MAJORITY Admins",
 					},
 				},
 			},
@@ -369,7 +366,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 					},
 					fconfigtx.AdminsPolicyKey: {
 						Type: fconfigtx.ImplicitMetaPolicyType,
-						Rule: "ANY Admins",
+						Rule: "MAJORITY Admins",
 					},
 				},
 			},
@@ -391,7 +388,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 			},
 			fconfigtx.AdminsPolicyKey: {
 				Type: fconfigtx.ImplicitMetaPolicyType,
-				Rule: "ANY Admins",
+				Rule: "MAJORITY Admins",
 			},
 		},
 	}
@@ -595,4 +592,53 @@ func doOutputAnchorPeersUpdate(conf *genesisconfig.Profile, channelId, outputAnc
 		return fmt.Errorf("Error writing channel anchor peer update: %s", err)
 	}
 	return nil
+}
+
+func GenerateConfigGroup(org *genesisconfig.Organization) (*cb.ConfigGroup, error) {
+	og, err := encoder.NewOrdererOrgGroup(org)
+	if err != nil {
+		return nil, errors.Wrapf(err, "bad org definition for org %s", org.Name)
+	}
+	return og, nil
+}
+
+func GenerateOrgProfile(dataDir string, node *network.Node, networkVersion string) *genesisconfig.Organization {
+	var anchorPeers []*genesisconfig.AnchorPeer
+	anchorPeer := &genesisconfig.AnchorPeer{
+		Host: node.GetHostname(),
+		Port: node.NodePort,
+	}
+	peerOrgsPath := filepath.Join(dataDir, "crypto-config", "peerOrganizations")
+	anchorPeers = append(anchorPeers, anchorPeer)
+	peerOrganization := &genesisconfig.Organization{
+		Name:   node.OrgId,
+		ID:     node.OrgId,
+		MSPDir: filepath.Join(peerOrgsPath, node.Domain, "msp"),
+		Policies: map[string]*genesisconfig.Policy{
+			fconfigtx.ReadersPolicyKey: {
+				Type: fconfigtx.SignaturePolicyType,
+				Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.peer', '%[1]s.client')", node.OrgId),
+			},
+			fconfigtx.WritersPolicyKey: {
+				Type: fconfigtx.SignaturePolicyType,
+				Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.client')", node.OrgId),
+			},
+			fconfigtx.AdminsPolicyKey: {
+				Type: fconfigtx.SignaturePolicyType,
+				Rule: fmt.Sprintf("OR('%s.admin')", node.OrgId),
+			},
+		},
+		AnchorPeers: anchorPeers,
+	}
+	if peerOrganization.MSPType == "" {
+		peerOrganization.MSPType = msp.ProviderTypeToString(msp.FABRIC)
+	}
+	if networkVersion == FabricVersion_V20 {
+		peerOrganization.Policies[fconfigtx.EndorsementPolicyKey] = &genesisconfig.Policy{
+			Type: fconfigtx.SignaturePolicyType,
+			Rule: fmt.Sprintf("OR('%s.member')", node.OrgId),
+		}
+	}
+
+	return peerOrganization
 }

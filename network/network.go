@@ -209,6 +209,16 @@ func (nc *NetworkConfig) ExtendNode(dataDir string, couchdb bool, peers, orderer
 	return peerNodes, ordererNodes, writeNetworkConfig(dataDir, nc)
 }
 
+func (nc *NetworkConfig) GetNode(nodeName string) *Node {
+	node, ok := nc.Nodes[nodeName]
+	if !ok {
+		return nil
+	}
+
+	node.hostname = fmt.Sprintf("%s.%s", node.Name, node.Domain)
+	return node
+}
+
 func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string) (*NetworkConfig, error) {
 	network := &NetworkConfig{}
 

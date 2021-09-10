@@ -1,30 +1,39 @@
 package sdkutil
 
 import (
+	"bytes"
 	"fmt"
-	"github.com/hyperledger/fabric-sdk-go/pkg/client/channel"
-	"path/filepath"
-
+	"github.com/golang/protobuf/proto"
+	"github.com/hyperledger/fabric-config/protolator"
+	"github.com/hyperledger/fabric-protos-go/common"
 	pb "github.com/hyperledger/fabric-protos-go/peer"
+	"github.com/hyperledger/fabric-sdk-go/pkg/client/channel"
 	mspclient "github.com/hyperledger/fabric-sdk-go/pkg/client/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/resmgmt"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/errors/retry"
+	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/context"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/core/config"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fab/ccpackager/gopackager"
 	lcpackager "github.com/hyperledger/fabric-sdk-go/pkg/fab/ccpackager/lifecycle"
+	"github.com/hyperledger/fabric-sdk-go/pkg/fab/resource"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/common/policydsl"
 	"github.com/pkg/errors"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
 	"github.com/wjbbig/fabric-distributed-tool/utils"
+	"path/filepath"
 )
 
 var logger = mylogger.NewLogger()
 
 // utils of fabric-sdk-go
 
-const defaultUsername = "Admin"
+const (
+	defaultUsername = "Admin"
+	extendAction    = "extend"
+	shrinkAction    = "shrink"
+)
 
 type FabricSDKDriver struct {
 	connProfilePath string
@@ -65,6 +74,7 @@ func createChannel(sdk *fabsdk.FabricSDK, resMgmtClient *resmgmt.Client, channel
 		ChannelConfigPath: filepath.Join(fileDir, "channel-artifacts", fmt.Sprintf("%s.tx", channelId)),
 		SigningIdentities: []msp.SigningIdentity{adminIdentity},
 	}
+
 	resp, err := resMgmtClient.SaveChannel(createChannelReq, resmgmt.WithRetry(retry.DefaultResMgmtOpts),
 		resmgmt.WithOrdererEndpoint(ordererEndpoint),
 		resmgmt.WithTargetEndpoints(peerEndpoint))
@@ -159,6 +169,175 @@ func (driver *FabricSDKDriver) UpdateCC(ccId, ccPath, ccVersion, channelId, orgI
 	}
 	logger.Infof("upgrade chaincode %s success, txid=%s", ccId, resp.TransactionID)
 	return nil
+}
+
+func (driver *FabricSDKDriver) ExtendOrShrinkChannel(actionType, channelId, newOrgId, ordererEndpoint string, existOrgIds []string, cg *common.ConfigGroup) error {
+	configBlock, err := driver.getConfigBlock(channelId, existOrgIds[0], ordererEndpoint)
+	if err != nil {
+		return errors.Wrapf(err, "get config block of channel %s failed", channelId)
+	}
+	chConfig, err := getChannelConfigFromBlock(configBlock)
+	if err != nil {
+		return errors.Wrap(err, "get channel config from block failed")
+	}
+	txId, err := extendOrShrinkChannel(actionType, channelId, newOrgId, ordererEndpoint, existOrgIds, cg, chConfig, driver.fabSDK)
+	if err != nil {
+		return errors.Wrapf(err, "%s channel failed", actionType)
+	}
+	logger.Infof("%s channel success, txid=%s", actionType, txId)
+	return nil
+}
+
+func getConfigEnvelopeBytes(configUpdate *common.ConfigUpdate) ([]byte, error) {
+
+	var buf bytes.Buffer
+	if err := protolator.DeepMarshalJSON(&buf, configUpdate); err != nil {
+		return nil, err
+	}
+
+	channelConfigBytes, err := proto.Marshal(configUpdate)
+	if err != nil {
+		return nil, err
+	}
+	configUpdateEnvelope := &common.ConfigUpdateEnvelope{
+		ConfigUpdate: channelConfigBytes,
+		Signatures:   nil,
+	}
+	configUpdateEnvelopeBytes, err := proto.Marshal(configUpdateEnvelope)
+	if err != nil {
+		return nil, err
+	}
+	payload := &common.Payload{
+		Data: configUpdateEnvelopeBytes,
+	}
+	payloadBytes, err := proto.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	configEnvelope := &common.Envelope{
+		Payload: payloadBytes,
+	}
+
+	return proto.Marshal(configEnvelope)
+}
+
+func signConfigUpdate(ctx context.Client, config *common.Config, channelID string, proposedConfigJSON string) (*common.ConfigSignature, error) {
+	configUpdate, err := getConfigUpdate(config, channelID, proposedConfigJSON)
+	if err != nil {
+		return nil, err
+	}
+	configUpdate.ChannelId = channelID
+
+	configUpdateBytes, err := proto.Marshal(configUpdate)
+	if err != nil {
+		return nil, err
+	}
+
+	return resource.CreateConfigSignature(ctx, configUpdateBytes)
+}
+
+func getConfigUpdate(originalConfig *common.Config, channelID string, proposedConfigJSON string) (*common.ConfigUpdate, error) {
+
+	proposedConfig := &common.Config{}
+	err := protolator.DeepUnmarshalJSON(bytes.NewReader([]byte(proposedConfigJSON)), proposedConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	configUpdate, err := resmgmt.CalculateConfigUpdate(channelID, originalConfig, proposedConfig)
+	if err != nil {
+		return nil, err
+	}
+	configUpdate.ChannelId = channelID
+
+	return configUpdate, nil
+}
+
+func (driver *FabricSDKDriver) getConfigBlock(channelId, orgId, ordererEndpoint string) (*common.Block, error) {
+	clientContext := driver.fabSDK.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(orgId))
+	resMgmtClient, err := resmgmt.New(clientContext)
+	if err != nil {
+		return nil, err
+	}
+	return resMgmtClient.QueryConfigBlockFromOrderer(channelId, resmgmt.WithOrdererEndpoint(ordererEndpoint))
+}
+
+func getChannelConfigFromBlock(block *common.Block) (*common.Config, error) {
+	if block == nil || block.Data == nil || len(block.Data.Data) == 0 {
+		return nil, errors.New("invalid block")
+	}
+	envelope := &common.Envelope{}
+	if err := proto.Unmarshal(block.Data.Data[0], envelope); err != nil {
+		return nil, err
+	}
+	payload := &common.Payload{}
+	if err := proto.Unmarshal(envelope.Payload, payload); err != nil {
+		return nil, err
+	}
+
+	configEnvelope := &common.ConfigEnvelope{}
+	if err := proto.Unmarshal(payload.Data, configEnvelope); err != nil {
+		return nil, err
+	}
+	return configEnvelope.Config, nil
+}
+
+func extendOrShrinkChannel(actionType string, channelId string, newOrgId, ordererEndpoint string, existOrgIds []string, cg *common.ConfigGroup, chConfig *common.Config, sdk *fabsdk.FabricSDK) (string, error) {
+	cloneMsg := proto.Clone(chConfig)
+	origin := cloneMsg.(*common.Config)
+	switch actionType {
+	case extendAction:
+		if cg == nil {
+			return "", errors.New("config group is nil")
+		}
+		chConfig.ChannelGroup.Groups["Application"].Groups[newOrgId] = cg
+
+	case shrinkAction:
+		delete(chConfig.ChannelGroup.Groups["Application"].Groups, newOrgId)
+	default:
+		return "", errors.Errorf("unknown action type, got %s", actionType)
+	}
+	var buf bytes.Buffer
+	if err := protolator.DeepMarshalJSON(&buf, chConfig); err != nil {
+		return "", err
+	}
+	proposedChannelConfigJSON := buf.String()
+
+	configUpdate, err := getConfigUpdate(origin, channelId, proposedChannelConfigJSON)
+	if err != nil {
+		return "", err
+	}
+
+	envelopeBytes, err := getConfigEnvelopeBytes(configUpdate)
+	if err != nil {
+		return "", err
+	}
+
+	configReader := bytes.NewReader(envelopeBytes)
+	ctx := sdk.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(existOrgIds[0]))
+	var signingIdentities []msp.SigningIdentity
+	for _, id := range existOrgIds {
+		mspClient, err := mspclient.New(sdk.Context(), mspclient.WithOrg(id))
+		if err != nil {
+			return "", err
+		}
+		adminIdentity, err := mspClient.GetSigningIdentity(defaultUsername)
+		if err != nil {
+			return "", err
+		}
+		signingIdentities = append(signingIdentities, adminIdentity)
+	}
+	req := resmgmt.SaveChannelRequest{ChannelID: channelId, ChannelConfig: configReader, SigningIdentities: signingIdentities}
+	resMgmtClient, err := resmgmt.New(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := resMgmtClient.SaveChannel(req, resmgmt.WithOrdererEndpoint(ordererEndpoint))
+	if err != nil {
+		return "", err
+	}
+	return string(resp.TransactionID), err
 }
 
 func (driver *FabricSDKDriver) Close() {
