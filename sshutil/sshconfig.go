@@ -24,8 +24,8 @@ type Client struct {
 	Port     string `yaml:"port,omitempty"`
 }
 
-// GenerateSSHConfig 将用户传入的节点信息保存起来
-// clientUrl示例: peer0.org1.example.com:7050@root@127.0.0.1:22:password
+// GenerateSSHConfig stores node info
+// clientUrl example: peer0.org1.example.com:7050@root@127.0.0.1:22:password
 func GenerateSSHConfig(filePath string, clients []Client) error {
 	var sshConf SSHConfig
 	sshConf.Clients = clients
@@ -58,7 +58,6 @@ func NewClient(clientUrl string, nodeType string) Client {
 	}
 }
 
-// UnmarshalSSHConfig 解析所有节点的ssh信息
 func UnmarshalSSHConfig(filePath string) (*SSHConfig, error) {
 	sshConf := &SSHConfig{}
 	filePath = filepath.Join(filePath, defaultSSHConfigName)

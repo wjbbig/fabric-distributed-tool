@@ -43,7 +43,7 @@ type ExternalNetwork struct {
 	External bool `yaml:"external,omitempty"`
 }
 
-// GenerateOrdererDockerComposeFile 生成启动orderer的docker-compose文件
+// GenerateOrdererDockerComposeFile generates docker-compose file for orderer node
 func GenerateOrdererDockerComposeFile(filePath string, orderer *network.Node, otherUrls []string) error {
 	var dockerCompose DockerCompose
 	logger.Infof("begin to generate docker_compose file, url=%s", orderer.GetHostname())
@@ -108,7 +108,7 @@ func GenerateOrdererDockerComposeFile(filePath string, orderer *network.Node, ot
 	return nil
 }
 
-// GeneratePeerDockerComposeFile 生产peer的docker-compose启动文件
+// GeneratePeerDockerComposeFile generates docker-compose file for peer node
 func GeneratePeerDockerComposeFile(filePath string, peer *network.Node, gossipBootstrapPeerUrl string, otherUrls []string, couchdb bool) error {
 	var dockerCompose DockerCompose
 	logger.Infof("begin to generate peer docker_compose file, url=%s", peer.GetHostname())

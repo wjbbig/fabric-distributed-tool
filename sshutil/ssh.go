@@ -82,7 +82,7 @@ func newSSHClient(username, password, address, nodeType string, needCouchdb bool
 	return cli, nil
 }
 
-// RunCmd 执行命令
+// RunCmd runs commands
 func (cli *SSHClient) RunCmd(cmd string) error {
 	var buffer bytes.Buffer
 	if cli.local {
@@ -108,7 +108,7 @@ func (cli *SSHClient) RunCmd(cmd string) error {
 	return nil
 }
 
-// Sftp 传输文件
+// Sftp transfers files
 func (cli *SSHClient) Sftp(localFilePath string, remoteDir string) error {
 	// 本地节点不用移动文件
 	if cli.local {

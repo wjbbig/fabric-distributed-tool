@@ -18,9 +18,9 @@ import (
 	"time"
 )
 
-// SplitNameOrgDomain 将url拆分成节点名称,组织名称和域名
-// 默认以'.'为分割符,分割后第1个元素是节点名称,第二个是组织名,
-// 第二个到之后所有的内容组为域名
+// SplitNameOrgDomain splits url into node name, organization name and domain name.
+// the default substr is '.', the first element is node name, the second is org name
+// and the last are all domain name.
 func SplitNameOrgDomain(url string) (string, string, string) {
 	firstDotIndex := strings.Index(url, ".")
 	name := url[:firstDotIndex]
@@ -31,7 +31,7 @@ func SplitNameOrgDomain(url string) (string, string, string) {
 	return name, orgName, domain
 }
 
-// Indexes 拓展了strings.Index方法，返回子字符串的全部位置
+// Indexes extends strings.Index，it returns all index of sub string.
 func Indexes(str string, subStr string) []int {
 	var indexes []int
 	var lastIndex int
@@ -47,7 +47,7 @@ func Indexes(str string, subStr string) []int {
 	return indexes
 }
 
-// RunLocalCmd 执行本地命令
+// RunLocalCmd runs local cmd
 func RunLocalCmd(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
