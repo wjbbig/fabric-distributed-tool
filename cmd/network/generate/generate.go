@@ -22,6 +22,7 @@ var (
 	ccPath         string
 	ccVersion      string
 	ccPolicy       string
+	ccInitFunc     string
 	ccInitParam    string
 	ccInitRequired bool
 	ccSequence     int64
@@ -50,6 +51,7 @@ func resetFlags() {
 	flags.StringVarP(&ccPath, "chaincodepath", "P", "", "Chaincode path")
 	flags.StringVarP(&ccVersion, "chaincodeversion", "v", "", "chaincode version")
 	flags.StringVarP(&ccPolicy, "chaincodepolicy", "r", "", "chaincode policy")
+	flags.StringVarP(&ccInitFunc, "chaincodeinitfunc", "f", "", "chaincode initial function")
 	flags.StringVarP(&ccInitParam, "chaincodeinitparam", "i", "", "chaincode initial params")
 	flags.StringVarP(&networkName, "network", "w", "", "Fabric network name")
 	flags.BoolVar(&ifCouchdb, "couchdb", false, "If use couchdb")
@@ -73,7 +75,7 @@ var (
 			}
 			switch {
 			case bootstrap:
-				if err := utils.DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy, ccInitRequired, ccSequence, ifCouchdb, peerUrls, ordererUrls, fabricVersion); err != nil {
+				if err := utils.DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccInitParam, ccPolicy, ccInitRequired, ccSequence, ifCouchdb, peerUrls, ordererUrls, fabricVersion); err != nil {
 					logger.Error(err.Error())
 				}
 			case extend:

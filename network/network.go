@@ -51,6 +51,7 @@ type Chaincode struct {
 	Version      string `yaml:"version,omitempty"`
 	Policy       string `yaml:"policy,omitempty"`
 	InitRequired bool   `yaml:"init_required,omitempty"`
+	InitFunc     string `yaml:"init_func,omitempty"`
 	InitParam    string `yaml:"init_param,omitempty"`
 }
 
@@ -99,7 +100,7 @@ func (nc *NetworkConfig) GetNodesByChannel(channelId string) (peerNodes []*Node,
 }
 
 // ExtendChannelChaincode installs a new chaincode on channel
-func (nc *NetworkConfig) ExtendChannelChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam string, initRequired bool) error {
+func (nc *NetworkConfig) ExtendChannelChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam string, initRequired bool) error {
 	chaincode, exist := nc.Chaincodes[ccId]
 	if exist {
 		return errors.Errorf("chaincode %s exists", ccId)
@@ -109,6 +110,7 @@ func (nc *NetworkConfig) ExtendChannelChaincode(dataDir, channelId, ccId, ccPath
 		Version:      ccVersion,
 		Policy:       ccPolicy,
 		InitRequired: initRequired,
+		InitFunc:     initFunc,
 		InitParam:    initParam,
 	}
 	nc.Chaincodes[ccId] = chaincode
@@ -124,7 +126,7 @@ func (nc *NetworkConfig) ExtendChannelChaincode(dataDir, channelId, ccId, ccPath
 	return writeNetworkConfig(dataDir, nc)
 }
 
-func (nc *NetworkConfig) UpgradeChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam string, initRequired bool) error {
+func (nc *NetworkConfig) UpgradeChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam string, initRequired bool) error {
 	chaincode, exist := nc.Chaincodes[ccId]
 	if !exist {
 		return errors.Errorf("chaincode %s does not exist", ccId)
@@ -137,6 +139,9 @@ func (nc *NetworkConfig) UpgradeChaincode(dataDir, channelId, ccId, ccPath, ccVe
 	}
 	if initParam != "" {
 		chaincode.InitParam = initParam
+	}
+	if initFunc != "" {
+		chaincode.InitFunc = initFunc
 	}
 	// args must be defined
 	chaincode.Version = ccVersion
@@ -219,7 +224,7 @@ func (nc *NetworkConfig) GetNode(nodeName string) *Node {
 	return node
 }
 
-func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string) (*NetworkConfig, error) {
+func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string) (*NetworkConfig, error) {
 	network := &NetworkConfig{}
 
 	network.Name = networkName
@@ -229,6 +234,7 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 		Version:      ccVersion,
 		InitRequired: ccInitRequired,
 		InitParam:    ccInitParam,
+		InitFunc:     ccInitFunc,
 	}
 	network.Chaincodes = map[string]*Chaincode{
 		ccId: chaincode,

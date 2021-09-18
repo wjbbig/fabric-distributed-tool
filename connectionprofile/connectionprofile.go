@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultConnProfileName     = "connection-config.yaml"
+	DefaultConnProfileName     = "connection-config.yaml"
 	defaultCryptoConfigDirName = "crypto-config"
 )
 
@@ -331,7 +331,7 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal connProfile")
 	}
-	filePath = filepath.Join(filePath, defaultConnProfileName)
+	filePath = filepath.Join(filePath, DefaultConnProfileName)
 	if err := utils.WriteFile(filePath, data, 0755); err != nil {
 		return errors.Wrap(err, "failed to write connection profile")
 	}
@@ -340,7 +340,7 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 }
 
 func UnmarshalConnectionProfile(dataDir string) (*ConnProfile, error) {
-	filePath := filepath.Join(dataDir, defaultConnProfileName)
+	filePath := filepath.Join(dataDir, DefaultConnProfileName)
 	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "connection profile does not exist")
@@ -375,7 +375,7 @@ func (profile *ConnProfile) ExtendChannel(dataDir, channelId string, peers []str
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal connProfile")
 	}
-	filePath := filepath.Join(dataDir, defaultConnProfileName)
+	filePath := filepath.Join(dataDir, DefaultConnProfileName)
 	if err := utils.WriteFile(filePath, data, 0755); err != nil {
 		return errors.Wrap(err, "failed to write connection profile")
 	}
@@ -453,7 +453,7 @@ func (profile *ConnProfile) ExtendNodesAndOrgs(dataDir string, peers, orderers [
 	if err != nil {
 		return errors.Wrap(err, "yaml marshal failed")
 	}
-	filePath := filepath.Join(dataDir, defaultConnProfileName)
+	filePath := filepath.Join(dataDir, DefaultConnProfileName)
 	if err := utils.WriteFile(filePath, data, 0755); err != nil {
 		return errors.Wrap(err, "write file failed")
 	}
