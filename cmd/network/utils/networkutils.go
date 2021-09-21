@@ -27,8 +27,8 @@ func GenerateCryptoConfig(dataDir string, networkConfig *network.NetworkConfig) 
 	return nil
 }
 
-func GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string) (*network.NetworkConfig, error) {
-	return network.GenerateNetworkConfig(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy, ccInitRequired, sequence, couchdb, peerUrls, ordererUrls)
+func GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string, networkVersion string) (*network.NetworkConfig, error) {
+	return network.GenerateNetworkConfig(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy, ccInitRequired, sequence, couchdb, peerUrls, ordererUrls, networkVersion)
 }
 
 func GenerateConfigtx(dataDir, consensus, channelId, fversion string, networkConfig *network.NetworkConfig) error {
@@ -342,7 +342,7 @@ func InstallCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId str
 	return nil
 }
 
-func deployCCV2(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy string, sequence int64, initRequired bool, initFunc string, initParams string, sdk *sdkutil.FabricSDKDriver) error {
+func deployCCV2(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy string, initRequired bool, initFunc string, initParams string, sdk *sdkutil.FabricSDKDriver) error {
 	ccOutputPath := filepath.Join(dataDir, "chaincode_packages", fmt.Sprintf("%s.tar.gz", ccId))
 	_, ccPkg, err := sdk.PackageCC(ccId, ccPath, ccOutputPath)
 	if err != nil {
@@ -353,6 +353,14 @@ func deployCCV2(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPath, ccV
 		return err
 	}
 	var packageId string
+	// get chaincode sequence, only used for fabric v2.x
+	var sequence int64
+	for _, chaincode := range nc.Channels[channelId].Chaincodes {
+		if chaincode.Name == ccId {
+			sequence = chaincode.Sequence
+			break
+		}
+	}
 	for _, client := range peerNodes {
 		if packageId, err = sdk.InstallCCV2(ccId, channelId, client.OrgId, client.GetHostname(), ccPkg); err != nil {
 			return err
@@ -410,7 +418,7 @@ func UpgradeCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId,
 }
 
 func deployCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPath, ccVersion,
-	ccPolicy, ccInitParam string, ccInitFunc string, initRequired bool, sequence int64) error {
+	ccPolicy, ccInitParam string, ccInitFunc string, initRequired bool) error {
 	sdk, err := sdkutil.NewFabricSDKDriver(filepath.Join(dataDir, connectionprofile.DefaultConnProfileName))
 	if err != nil {
 		return err
@@ -419,7 +427,7 @@ func deployCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPa
 
 	switch nc.Version {
 	case fabricconfig.FabricVersion_V20:
-		if err := deployCCV2(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, sequence, initRequired, ccInitFunc, ccInitParam, sdk); err != nil {
+		if err := deployCCV2(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initRequired, ccInitFunc, ccInitParam, sdk); err != nil {
 			return err
 		}
 	default:
@@ -446,6 +454,7 @@ func upgradeCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccP
 
 	switch nc.Version {
 	case fabricconfig.FabricVersion_V20:
+		// todo finish it
 		fmt.Println("NOT SUPPORT")
 	default:
 		if err := InstallCC(nc, ccId, ccPath, ccVersion, channelId, sdk); err != nil {
@@ -462,7 +471,7 @@ func upgradeCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccP
 
 func DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam,
 	ccPolicy string, ccInitRequired bool, sequence int64, ifCouchdb bool, peerUrls, ordererUrls []string, fVersion string) error {
-	networkConfig, err := GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy, ccInitRequired, sequence, ifCouchdb, peerUrls, ordererUrls)
+	networkConfig, err := GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy, ccInitRequired, sequence, ifCouchdb, peerUrls, ordererUrls, fVersion)
 	if err != nil {
 		return err
 	}
@@ -491,8 +500,8 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 	}
 	// startup command only starts a fabric network with one channel and one chaincode right now
 	// TODO: support multi channels
-	var channelId, ccId, ccPath, ccInitParam, ccVersion, ccPolicy, consensus string
-	var ifInstallCC bool
+	var channelId, ccId, ccPath, ccInitParam, ccVersion, ccPolicy, ccInitFunc, consensus string
+	var ifInstallCC, ccInitRequired bool
 	for name, channel := range nc.Channels {
 		channelId = name
 		if len(channel.Chaincodes) > 0 {
@@ -502,6 +511,8 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 		}
 		ccPath = nc.Chaincodes[channel.Chaincodes[0].Name].Path
 		ccInitParam = nc.Chaincodes[channel.Chaincodes[0].Name].InitParam
+		ccInitFunc = nc.Chaincodes[channel.Chaincodes[0].Name].InitFunc
+		ccInitRequired = nc.Chaincodes[channel.Chaincodes[0].Name].InitRequired
 		ccVersion = nc.Chaincodes[channel.Chaincodes[0].Name].Version
 		ccPolicy = nc.Chaincodes[channel.Chaincodes[0].Name].Policy
 		ccId = channel.Chaincodes[0].Name
@@ -550,7 +561,9 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 	}
 	if ifInstallCC {
 		if nc.Version == fabricconfig.FabricVersion_V20 {
-
+			if err := deployCCV2(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, ccInitRequired, ccInitFunc, ccInitParam, sdk); err != nil {
+				return err
+			}
 		} else {
 			// install chaincode
 			if err := InstallCC(nc, ccId, ccPath, ccVersion, channelId, sdk); err != nil {
@@ -574,8 +587,8 @@ func DoDeployccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFu
 	if err = nc.ExtendChannelChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam, initRequired); err != nil {
 		return err
 	}
-	// TODO sequence
-	if err = deployCCByVersion(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam, initFunc, initRequired, 1); err != nil {
+
+	if err = deployCCByVersion(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam, initFunc, initRequired); err != nil {
 		return err
 	}
 	return err

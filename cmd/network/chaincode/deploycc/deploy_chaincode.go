@@ -30,7 +30,6 @@ var installChaincodeCmd = &cobra.Command{
 	Short: "deploy a new chaincode on the specified channel",
 	Long:  "deploy a new chaincode on the specified channel",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO sequence
 		if err := utils.DoDeployccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam, initRequired); err != nil {
 			logger.Error(err.Error())
 		}

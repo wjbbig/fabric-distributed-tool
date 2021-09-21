@@ -224,10 +224,11 @@ func (nc *NetworkConfig) GetNode(nodeName string) *Node {
 	return node
 }
 
-func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string) (*NetworkConfig, error) {
-	network := &NetworkConfig{}
-
-	network.Name = networkName
+func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string, networkVersion string) (*NetworkConfig, error) {
+	network := &NetworkConfig{
+		Name:    networkName,
+		Version: networkVersion,
+	}
 	chaincode := &Chaincode{
 		Path:         ccPath,
 		Policy:       ccPolicy,
