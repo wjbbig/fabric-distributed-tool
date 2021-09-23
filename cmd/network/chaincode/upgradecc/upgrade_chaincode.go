@@ -20,6 +20,7 @@ var (
 	ccPath       string
 	ccVersion    string
 	ccPolicy     string
+	redeploy     bool
 	initRequired bool
 	initFunc     string
 	initParam    string
@@ -30,7 +31,7 @@ var upgradeChaincodeCmd = &cobra.Command{
 	Short: "upgrade a exist chaincode on the specified channel",
 	Long:  "upgrade a exist chaincode on the specified channel",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := utils.DoUpgradeccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam, initRequired); err != nil {
+		if err := utils.DoUpgradeccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam, initRequired, redeploy); err != nil {
 			logger.Error(err.Error())
 		}
 		return nil
@@ -52,6 +53,8 @@ func resetFlags() {
 	flags.StringVarP(&ccPath, "ccpath", "p", "", "The path of new chaincode")
 	flags.StringVarP(&ccVersion, "ccversion", "v", "", "The version of new chaincode")
 	flags.BoolVarP(&initRequired, "initrequired", "r", false, "If the new chaincode needs initialization")
+	flags.BoolVar(&redeploy, "redeploy", false, "If the new chaincode needs redeploy. This option is only used by fabric v2.0, "+
+		"if we only update chaincode policy, redeploy should be false")
 	flags.StringVarP(&ccPolicy, "ccpolicy", "P", "", "The endorsement policy of new chaincode")
 	flags.StringVarP(&initParam, "initparam", "i", "", "The initial param of new chaincode")
 	flags.StringVarP(&initFunc, "initfunc", "f", "", "The initial function of new chaincode")

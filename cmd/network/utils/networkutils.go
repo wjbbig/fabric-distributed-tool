@@ -342,12 +342,7 @@ func InstallCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId str
 	return nil
 }
 
-func deployCCV2(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy string, initRequired bool, initFunc string, initParams string, sdk *sdkutil.FabricSDKDriver) error {
-	ccOutputPath := filepath.Join(dataDir, "chaincode_packages", fmt.Sprintf("%s.tar.gz", ccId))
-	_, ccPkg, err := sdk.PackageCC(ccId, ccPath, ccOutputPath)
-	if err != nil {
-		return err
-	}
+func deployCCV2(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy string, initRequired bool, initFunc string, initParams string, redeploy bool, sdk *sdkutil.FabricSDKDriver) error {
 	peerNodes, ordererNodes, err := nc.GetNodesByChannel(channelId)
 	if err != nil {
 		return err
@@ -355,21 +350,32 @@ func deployCCV2(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPath, ccV
 	var packageId string
 	// get chaincode sequence, only used for fabric v2.x
 	var sequence int64
-	for _, chaincode := range nc.Channels[channelId].Chaincodes {
-		if chaincode.Name == ccId {
-			sequence = chaincode.Sequence
-			break
-		}
-	}
-	for _, client := range peerNodes {
-		if packageId, err = sdk.InstallCCV2(ccId, channelId, client.OrgId, client.GetHostname(), ccPkg); err != nil {
+	if redeploy {
+		ccOutputPath := filepath.Join(dataDir, "chaincode_packages", fmt.Sprintf("%s.tar.gz", ccId))
+		_, ccPkg, err := sdk.PackageCC(ccId, ccPath, ccOutputPath)
+		if err != nil {
 			return err
 		}
+		for _, chaincode := range nc.Channels[channelId].Chaincodes {
+			if chaincode.Name == ccId {
+				sequence = chaincode.Sequence
+				break
+			}
+		}
+		for _, client := range peerNodes {
+			if packageId, err = sdk.InstallCCV2(ccId, channelId, client.OrgId, client.GetHostname(), ccPkg); err != nil {
+				return err
+			}
+		}
+	}
+
+	for _, client := range peerNodes {
 		if err = sdk.ApproveCC(ccId, ccVersion, ccPolicy, channelId, client.OrgId, client.GetHostname(),
 			ordererNodes[0].GetHostname(), packageId, sequence, initRequired); err != nil {
 			return err
 		}
 	}
+
 	if err := sdk.CommitCC(ccId, ccVersion, ccPolicy, channelId, peerNodes[0].OrgId, peerNodes[0].GetHostname(),
 		ordererNodes[0].GetHostname(), sequence, initRequired); err != nil {
 		return err
@@ -405,7 +411,7 @@ func InstantiateCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId
 }
 
 func UpgradeCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId,
-	policy, initArgsStr string, initRequired bool, sdk *sdkutil.FabricSDKDriver) error {
+	policy, initArgsStr string, sdk *sdkutil.FabricSDKDriver) error {
 	initArgs := strings.Split(initArgsStr, ",")
 	peerNodes, _, err := nc.GetNodesByChannel(channelId)
 	if err != nil {
@@ -413,6 +419,53 @@ func UpgradeCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId,
 	}
 	if err := sdk.UpdateCC(ccId, ccPath, ccVersion, channelId, peerNodes[0].OrgId, policy, initArgs, peerNodes[0].GetHostname()); err != nil {
 		return err
+	}
+	return nil
+}
+
+func upgradeCCV2(nc *network.NetworkConfig, dataDir, ccId, ccPath, ccVersion, channelId,
+	policy, initFunc, initArgsStr string, initRequired bool, redeploy bool, sdk *sdkutil.FabricSDKDriver) error {
+	ccOutputPath := filepath.Join(dataDir, "chaincode_packages", fmt.Sprintf("%s.tar.gz", ccId))
+	_, ccPkg, err := sdk.PackageCC(ccId, ccPath, ccOutputPath)
+	if err != nil {
+		return err
+	}
+	peerNodes, ordererNodes, err := nc.GetNodesByChannel(channelId)
+	if err != nil {
+		return err
+	}
+	var packageId string
+	// get chaincode sequence, only used for fabric v2.x
+	var sequence int64
+	for _, chaincode := range nc.Channels[channelId].Chaincodes {
+		if chaincode.Name == ccId {
+			sequence = chaincode.Sequence
+			break
+		}
+	}
+	for _, client := range peerNodes {
+		if packageId, err = sdk.InstallCCV2(ccId, channelId, client.OrgId, client.GetHostname(), ccPkg); err != nil {
+			return err
+		}
+		if err = sdk.ApproveCC(ccId, ccVersion, policy, channelId, client.OrgId, client.GetHostname(),
+			ordererNodes[0].GetHostname(), packageId, sequence, initRequired); err != nil {
+			return err
+		}
+	}
+	if err := sdk.CommitCC(ccId, ccVersion, policy, channelId, peerNodes[0].OrgId, peerNodes[0].GetHostname(),
+		ordererNodes[0].GetHostname(), sequence, initRequired); err != nil {
+		return err
+	}
+
+	if initRequired {
+		var peers []string
+		for _, node := range peerNodes {
+			peers = append(peers, node.GetHostname())
+		}
+		initArgs := strings.Split(initArgsStr, ",")
+		if err := sdk.InitCC(ccId, channelId, peerNodes[0].OrgId, initFunc, initArgs, peers); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -427,7 +480,7 @@ func deployCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPa
 
 	switch nc.Version {
 	case fabricconfig.FabricVersion_V20:
-		if err := deployCCV2(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initRequired, ccInitFunc, ccInitParam, sdk); err != nil {
+		if err := deployCCV2(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initRequired, ccInitFunc, ccInitParam, true, sdk); err != nil {
 			return err
 		}
 	default:
@@ -444,7 +497,7 @@ func deployCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPa
 }
 
 func upgradeCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPath, ccVersion,
-	ccPolicy, ccInitParam string, initRequired bool) error {
+	ccPolicy, ccInitFunc, ccInitParam string, initRequired bool, redeploy bool) error {
 
 	sdk, err := sdkutil.NewFabricSDKDriver(filepath.Join(dataDir, connectionprofile.DefaultConnProfileName))
 	if err != nil {
@@ -454,13 +507,14 @@ func upgradeCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccP
 
 	switch nc.Version {
 	case fabricconfig.FabricVersion_V20:
-		// todo finish it
-		fmt.Println("NOT SUPPORT")
+		if err := deployCCV2(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initRequired, ccInitFunc, ccInitParam, redeploy, sdk); err != nil {
+			return err
+		}
 	default:
 		if err := InstallCC(nc, ccId, ccPath, ccVersion, channelId, sdk); err != nil {
 			return err
 		}
-		if err := UpgradeCC(nc, ccId, ccPath, ccVersion, channelId, ccPolicy, ccInitParam, initRequired, sdk); err != nil {
+		if err := UpgradeCC(nc, ccId, ccPath, ccVersion, channelId, ccPolicy, ccInitParam, sdk); err != nil {
 			return err
 		}
 	}
@@ -561,7 +615,7 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 	}
 	if ifInstallCC {
 		if nc.Version == fabricconfig.FabricVersion_V20 {
-			if err := deployCCV2(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, ccInitRequired, ccInitFunc, ccInitParam, sdk); err != nil {
+			if err := deployCCV2(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, ccInitRequired, ccInitFunc, ccInitParam, true, sdk); err != nil {
 				return err
 			}
 		} else {
@@ -594,7 +648,7 @@ func DoDeployccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFu
 	return err
 }
 
-func DoUpgradeccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam string, initRequired bool) error {
+func DoUpgradeccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam string, initRequired bool, redeploy bool) error {
 	nc, err := network.UnmarshalNetworkConfig(dataDir)
 	if err != nil {
 		return err
@@ -602,7 +656,7 @@ func DoUpgradeccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initF
 	if err = nc.UpgradeChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam, initRequired); err != nil {
 		return err
 	}
-	if err = upgradeCCByVersion(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initParam, initRequired); err != nil {
+	if err = upgradeCCByVersion(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam, initRequired, redeploy); err != nil {
 		return err
 	}
 	return err
