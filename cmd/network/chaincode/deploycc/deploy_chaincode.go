@@ -51,7 +51,7 @@ func resetFlags() {
 	flags.StringVarP(&ccId, "ccid", "n", "", "The name of new chaincode")
 	flags.StringVarP(&ccPath, "ccpath", "p", "", "The path of new chaincode")
 	flags.StringVarP(&ccVersion, "ccversion", "v", "", "The version of new chaincode")
-	flags.BoolVarP(&initRequired, "initrequired", "r", false, "If the new chaincode needs initialization")
+	flags.BoolVar(&initRequired, "initcc", false, "If the new chaincode needs initialization")
 	flags.StringVarP(&ccPolicy, "ccpolicy", "P", "", "The endorsement policy of new chaincode")
 	flags.StringVarP(&initParam, "initparam", "i", "", "The initial param of new chaincode")
 	flags.StringVarP(&initFunc, "initfunc", "f", "", "The initial function of new chaincode")

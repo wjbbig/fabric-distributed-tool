@@ -52,7 +52,7 @@ func resetFlags() {
 	flags.StringVarP(&ccId, "ccid", "n", "", "The name of new chaincode")
 	flags.StringVarP(&ccPath, "ccpath", "p", "", "The path of new chaincode")
 	flags.StringVarP(&ccVersion, "ccversion", "v", "", "The version of new chaincode")
-	flags.BoolVarP(&initRequired, "initrequired", "r", false, "If the new chaincode needs initialization")
+	flags.BoolVar(&initRequired, "initcc", false, "If the new chaincode needs initialization")
 	flags.BoolVar(&redeploy, "redeploy", false, "If the new chaincode needs redeploy. This option is only used by fabric v2.0, "+
 		"if we only update chaincode policy, redeploy should be false")
 	flags.StringVarP(&ccPolicy, "ccpolicy", "P", "", "The endorsement policy of new chaincode")

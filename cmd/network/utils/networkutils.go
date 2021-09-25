@@ -350,6 +350,7 @@ func deployCCV2(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPath, ccV
 	var packageId string
 	// get chaincode sequence, only used for fabric v2.x
 	var sequence int64
+	var peers []string
 	if redeploy {
 		ccOutputPath := filepath.Join(dataDir, "chaincode_packages", fmt.Sprintf("%s.tar.gz", ccId))
 		_, ccPkg, err := sdk.PackageCC(ccId, ccPath, ccOutputPath)
@@ -362,10 +363,12 @@ func deployCCV2(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPath, ccV
 				break
 			}
 		}
+
 		for _, client := range peerNodes {
 			if packageId, err = sdk.InstallCCV2(ccId, channelId, client.OrgId, client.GetHostname(), ccPkg); err != nil {
 				return err
 			}
+			peers = append(peers, client.GetHostname())
 		}
 	}
 
@@ -376,8 +379,8 @@ func deployCCV2(nc *network.NetworkConfig, dataDir, channelId, ccId, ccPath, ccV
 		}
 	}
 
-	if err := sdk.CommitCC(ccId, ccVersion, ccPolicy, channelId, peerNodes[0].OrgId, peerNodes[0].GetHostname(),
-		ordererNodes[0].GetHostname(), sequence, initRequired); err != nil {
+	if err := sdk.CommitCC(ccId, ccVersion, ccPolicy, channelId, peerNodes[0].OrgId,
+		ordererNodes[0].GetHostname(), peers, sequence, initRequired); err != nil {
 		return err
 	}
 
@@ -419,53 +422,6 @@ func UpgradeCC(nc *network.NetworkConfig, ccId, ccPath, ccVersion, channelId,
 	}
 	if err := sdk.UpdateCC(ccId, ccPath, ccVersion, channelId, peerNodes[0].OrgId, policy, initArgs, peerNodes[0].GetHostname()); err != nil {
 		return err
-	}
-	return nil
-}
-
-func upgradeCCV2(nc *network.NetworkConfig, dataDir, ccId, ccPath, ccVersion, channelId,
-	policy, initFunc, initArgsStr string, initRequired bool, redeploy bool, sdk *sdkutil.FabricSDKDriver) error {
-	ccOutputPath := filepath.Join(dataDir, "chaincode_packages", fmt.Sprintf("%s.tar.gz", ccId))
-	_, ccPkg, err := sdk.PackageCC(ccId, ccPath, ccOutputPath)
-	if err != nil {
-		return err
-	}
-	peerNodes, ordererNodes, err := nc.GetNodesByChannel(channelId)
-	if err != nil {
-		return err
-	}
-	var packageId string
-	// get chaincode sequence, only used for fabric v2.x
-	var sequence int64
-	for _, chaincode := range nc.Channels[channelId].Chaincodes {
-		if chaincode.Name == ccId {
-			sequence = chaincode.Sequence
-			break
-		}
-	}
-	for _, client := range peerNodes {
-		if packageId, err = sdk.InstallCCV2(ccId, channelId, client.OrgId, client.GetHostname(), ccPkg); err != nil {
-			return err
-		}
-		if err = sdk.ApproveCC(ccId, ccVersion, policy, channelId, client.OrgId, client.GetHostname(),
-			ordererNodes[0].GetHostname(), packageId, sequence, initRequired); err != nil {
-			return err
-		}
-	}
-	if err := sdk.CommitCC(ccId, ccVersion, policy, channelId, peerNodes[0].OrgId, peerNodes[0].GetHostname(),
-		ordererNodes[0].GetHostname(), sequence, initRequired); err != nil {
-		return err
-	}
-
-	if initRequired {
-		var peers []string
-		for _, node := range peerNodes {
-			peers = append(peers, node.GetHostname())
-		}
-		initArgs := strings.Split(initArgsStr, ",")
-		if err := sdk.InitCC(ccId, channelId, peerNodes[0].OrgId, initFunc, initArgs, peers); err != nil {
-			return err
-		}
 	}
 	return nil
 }

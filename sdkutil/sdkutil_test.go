@@ -92,7 +92,7 @@ func TestFabricSDKDriverV2(t *testing.T) {
 	require.NoError(t, err)
 	time.Sleep(time.Second)
 	err = sdk.CommitCC("mycc", "v1", "AND('testpeerorg1.peer','testpeerorg2.peer')", "mychannel",
-		"testpeerorg1", "peer.testpeerorg1", "orderer5.testordererorg", 1, true)
+		"testpeerorg1", "orderer5.testordererorg", []string{"peer.testpeerorg1"}, 1, true)
 	require.NoError(t, err)
 	err = sdk.InitCC("mycc", "mychannel", "testpeerorg2", "InitLedger", []string{}, []string{"peer.testpeerorg1", "peer.testpeerorg2"})
 	require.NoError(t, err)

@@ -388,7 +388,7 @@ func (driver *FabricSDKDriver) InstallCCV2(ccId, channelId, orgId, peerEndpoint 
 	if err != nil {
 		return "", errors.Wrap(err, "install chaincode failed")
 	}
-	if resp[0].PackageID != packageId {
+	if resp != nil && resp[0].PackageID != packageId {
 		return "", errors.Wrap(err, "packageId from install response is not equal to the id from computed")
 	}
 
@@ -471,7 +471,7 @@ func (driver *FabricSDKDriver) QueryApprovedCC(ccId string, channelId, orgId, pe
 	return nil
 }
 
-func (driver *FabricSDKDriver) CommitCC(ccId, ccVersion, ccPolicy, channelId, orgId, peerEndpoint, ordererEndpoint string, sequence int64, initRequired bool) error {
+func (driver *FabricSDKDriver) CommitCC(ccId, ccVersion, ccPolicy, channelId, orgId, ordererEndpoint string, peerEndpoint []string, sequence int64, initRequired bool) error {
 	policy, err := policydsl.FromString(ccPolicy)
 	req := resmgmt.LifecycleCommitCCRequest{
 		Name:              ccId,
@@ -488,7 +488,7 @@ func (driver *FabricSDKDriver) CommitCC(ccId, ccVersion, ccPolicy, channelId, or
 		return errors.Wrapf(err, "create resmgmt client failed, channel name=%s", channelId)
 	}
 	txID, err := resMgmtClient.LifecycleCommitCC(channelId, req, resmgmt.WithRetry(retry.DefaultResMgmtOpts),
-		resmgmt.WithTargetEndpoints(peerEndpoint), resmgmt.WithOrdererEndpoint(ordererEndpoint))
+		resmgmt.WithOrdererEndpoint(ordererEndpoint))
 	if err != nil {
 		return errors.Wrap(err, "commit chaincode failed")
 	}
