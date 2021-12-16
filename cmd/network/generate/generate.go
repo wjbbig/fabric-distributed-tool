@@ -6,6 +6,7 @@ import (
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/utils"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
 	"os"
+	"path/filepath"
 )
 
 var logger = mylogger.NewLogger()
@@ -70,6 +71,13 @@ var (
 			if dataDir == "" {
 				logger.Error("datadir is not specified")
 			}
+			var err error
+			if !filepath.IsAbs(dataDir) {
+				if dataDir, err = filepath.Abs(dataDir); err != nil {
+					return err
+				}
+			}
+
 			if _, err := os.Stat(dataDir); err != nil {
 				_ = os.MkdirAll(dataDir, 0755)
 			}

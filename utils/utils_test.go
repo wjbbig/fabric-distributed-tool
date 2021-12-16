@@ -2,6 +2,7 @@ package utils
 
 import (
 	"github.com/stretchr/testify/require"
+	"path/filepath"
 	"testing"
 )
 
@@ -24,4 +25,11 @@ func TestSplitUrlParam(t *testing.T) {
 	t.Log(ip)
 	t.Log(sshPort)
 	t.Log(password)
+}
+
+func TestAbs(t *testing.T) {
+	abs, err := filepath.Abs("./fdtdata")
+	require.NoError(t, err)
+
+	t.Log(abs)
 }

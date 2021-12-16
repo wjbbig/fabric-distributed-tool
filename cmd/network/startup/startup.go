@@ -5,14 +5,14 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/utils"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
+	"path/filepath"
 )
 
 var logger = mylogger.NewLogger()
 
-// TODO delete some useless params and write them into the ssh config file.
 var (
-	dataDir          string
-	startOnly        bool
+	dataDir   string
+	startOnly bool
 )
 
 func init() {
@@ -28,6 +28,13 @@ var startupCmd = &cobra.Command{
 		if dataDir == "" {
 			logger.Error("datadir is not specified")
 		}
+		var err error
+		if !filepath.IsAbs(dataDir) {
+			if dataDir, err = filepath.Abs(dataDir); err != nil {
+				return err
+			}
+		}
+
 		if err := utils.DoStartupCommand(dataDir, startOnly); err != nil {
 			logger.Error(err.Error())
 			return nil
