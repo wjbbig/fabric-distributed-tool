@@ -229,16 +229,18 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 		Name:    networkName,
 		Version: networkVersion,
 	}
-	chaincode := &Chaincode{
-		Path:         ccPath,
-		Policy:       ccPolicy,
-		Version:      ccVersion,
-		InitRequired: ccInitRequired,
-		InitParam:    ccInitParam,
-		InitFunc:     ccInitFunc,
-	}
-	network.Chaincodes = map[string]*Chaincode{
-		ccId: chaincode,
+	if ccId != "" {
+		chaincode := &Chaincode{
+			Path:         ccPath,
+			Policy:       ccPolicy,
+			Version:      ccVersion,
+			InitRequired: ccInitRequired,
+			InitParam:    ccInitParam,
+			InitFunc:     ccInitFunc,
+		}
+		network.Chaincodes = map[string]*Chaincode{
+			ccId: chaincode,
+		}
 	}
 	channels := make(map[string]*Channel)
 	channel := &Channel{Consensus: consensus}
@@ -259,10 +261,12 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 		nodes[node.hostname] = node
 		channel.Orderers = append(channel.Orderers, node.hostname)
 	}
-	channel.Chaincodes = append(channel.Chaincodes, &ChannelChaincode{
-		Name:     ccId,
-		Sequence: sequence,
-	})
+	if ccId != "" {
+		channel.Chaincodes = append(channel.Chaincodes, &ChannelChaincode{
+			Name:     ccId,
+			Sequence: sequence,
+		})
+	}
 	channels[channelId] = channel
 	network.Channels = channels
 	network.Nodes = nodes
