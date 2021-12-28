@@ -80,9 +80,14 @@ func CheckLocalIp(ip string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if addr.IP.IsLoopback() || addr.IP.IsUnspecified() {
+	outBoundIP, err := GetOutBoundIP()
+	if err != nil {
+		return false, err
+	}
+	if strings.Contains(ip, outBoundIP) || addr.IP.IsLoopback() || addr.IP.IsUnspecified() {
 		return true, nil
 	}
+
 	return false, nil
 }
 
@@ -144,4 +149,14 @@ func DirExists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+func GetOutBoundIP() (ip string, err error) {
+	conn, err := net.Dial("udp", "8.8.8.8:53")
+	if err != nil {
+		return "", err
+	}
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	ip = strings.Split(localAddr.String(), ":")[0]
+	return
 }
