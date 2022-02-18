@@ -23,5 +23,5 @@ func Cmd() *cobra.Command {
 }
 
 func getInfo() string {
-	return fmt.Sprintf("fdt version: v0.1\nsupported fabric version: v1.4.x")
+	return fmt.Sprintf("fdt version: v0.1\nsupported fabric version: v1.4.x|v2.x")
 }
