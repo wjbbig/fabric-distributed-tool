@@ -8,7 +8,7 @@ sleep 5
 echo "sleep 5s"
 sleep 5
 
-./fdt network generate -d /opt/fdt -p peer1.testpeerorg1:9051@@127.0.0.1:22: -p peer.testpeerorg3:10051@@127.0.0.1:22:--extend
+./fdt network generate -d /opt/fdt -p peer1.testpeerorg1:9051@@127.0.0.1:22: -p peer.testpeerorg3:10051@@127.0.0.1:22: --extend
 
 ./fdt network startnode -d /opt/fdt -n peer1.testpeerorg1
 
