@@ -44,13 +44,13 @@ type ExternalNetwork struct {
 }
 
 // GenerateOrdererDockerComposeFile generates docker-compose file for orderer node
-func GenerateOrdererDockerComposeFile(filePath string, orderer *network.Node, otherUrls []string) error {
+func GenerateOrdererDockerComposeFile(filePath string, orderer *network.Node, imageTag string, otherUrls []string) error {
 	var dockerCompose DockerCompose
 	logger.Infof("begin to generate docker_compose file, url=%s", orderer.GetHostname())
 
 	ordererService := Service{
 		ContainerName: orderer.GetHostname(),
-		Image:         "hyperledger/fabric-orderer",
+		Image:         fmt.Sprintf("hyperledger/fabric-orderer:%s", imageTag),
 		Environment: []string{
 			"FABRIC_LOGGING_SPEC=INFO",
 			"ORDERER_GENERAL_LISTENADDRESS=0.0.0.0",
@@ -109,13 +109,13 @@ func GenerateOrdererDockerComposeFile(filePath string, orderer *network.Node, ot
 }
 
 // GeneratePeerDockerComposeFile generates docker-compose file for peer node
-func GeneratePeerDockerComposeFile(filePath string, peer *network.Node, gossipBootstrapPeerUrl string, otherUrls []string, couchdb bool) error {
+func GeneratePeerDockerComposeFile(filePath string, peer *network.Node, gossipBootstrapPeerUrl string, otherUrls []string, imageTags []string, couchdb bool) error {
 	var dockerCompose DockerCompose
 	logger.Infof("begin to generate peer docker_compose file, url=%s", peer.GetHostname())
 	networkPrefix := path.Base(filePath)
 	peerService := Service{
 		ContainerName: peer.GetHostname(),
-		Image:         "hyperledger/fabric-peer",
+		Image:         fmt.Sprintf("hyperledger/fabric-peer:%s", imageTags[0]),
 		WorkingDir:    "/opt/gopath/src/github.com/hyperledger/fabric/peer",
 		Environment: []string{
 			"CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock",
@@ -161,7 +161,7 @@ func GeneratePeerDockerComposeFile(filePath string, peer *network.Node, gossipBo
 	}
 	// generate docker compose file if using couchdb
 	if couchdb {
-		couchdbServiceName, err := GenerateCouchDB(filePath, peer.GetHostname())
+		couchdbServiceName, err := GenerateCouchDB(filePath, peer.GetHostname(), imageTags[2])
 		if err != nil {
 			return err
 		}
@@ -195,26 +195,26 @@ func GenerateCLI(filePath string) error {
 	return nil
 }
 
-func GenerateCA(filePath string, orgId string, domain string, port string) error {
+func GenerateCA(filePath string, orgId string, domain string, port int, imageTag, enrollId, enrollSecret string) error {
 	var dockerCompose DockerCompose
 	dockerCompose.Version = "2"
 	caService := Service{
 		ContainerName: fmt.Sprintf("ca_%s", orgId),
-		Image:         "hyperledger/fabric-ca",
+		Image:         "hyperledger/fabric-ca:" + imageTag,
 		Environment: []string{
 			"FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server",
 			fmt.Sprintf("FABRIC_CA_SERVER_CA_NAME=ca-%s", orgId),
-			"FABRIC_CA_SERVER_TLS_ENABLED=true",
+			"FABRIC_CA_SERVER_TLS_ENABLED=false",
 			fmt.Sprintf("FABRIC_CA_SERVER_TLS_CERTFILE=/etc/hyperledger/fabric-ca-server-config/ca.%s-cert.pem", domain),
 			"FABRIC_CA_SERVER_TLS_KEYFILE=/etc/hyperledger/fabric-ca-server-config/priv_sk",
-			fmt.Sprintf("FABRIC_CA_SERVER_PORT=%s", port),
+			fmt.Sprintf("FABRIC_CA_SERVER_PORT=%d", 7054),
 		},
-		Command: `sh -c 'fabric-ca-server start --ca.certfile /etc/hyperledger/fabric-ca-server-config/ca.org1.example.com-cert.pem --ca.keyfile /etc/hyperledger/fabric-ca-server-config/priv_sk -b admin:adminpw -d'`,
+		Command: fmt.Sprintf("sh -c 'fabric-ca-server start --ca.certfile /etc/hyperledger/fabric-ca-server-config/ca.%s-cert.pem --ca.keyfile /etc/hyperledger/fabric-ca-server-config/priv_sk -b %s:%s -d'", domain, enrollId, enrollSecret),
 		Volumes: []string{
 			fmt.Sprintf("%s/crypto-config/peerOrganizations/%s/ca/:/etc/hyperledger/fabric-ca-server-config",
 				filePath, domain),
 		},
-		Ports:    []string{fmt.Sprintf("%[1]s:%[1]s", port)},
+		Ports:    []string{fmt.Sprintf("%d:7054", port)},
 		Networks: []string{defaultNetworkName},
 	}
 	dockerCompose.Services = map[string]Service{
@@ -236,7 +236,7 @@ func GenerateCA(filePath string, orgId string, domain string, port string) error
 	return nil
 }
 
-func GenerateCouchDB(filePath string, peerUrl string) (string, error) {
+func GenerateCouchDB(filePath string, peerUrl string, imageTag string) (string, error) {
 	logger.Infof("begin to generate couchdb docker compose file for %s", peerUrl)
 	var dockerCompose DockerCompose
 	dockerCompose.Version = "2"
@@ -248,7 +248,7 @@ func GenerateCouchDB(filePath string, peerUrl string) (string, error) {
 	serviceName := fmt.Sprintf("couchdb%d", port)
 	couchDBService := Service{
 		ContainerName: serviceName,
-		Image:         "hyperledger/fabric-couchdb",
+		Image:         "hyperledger/fabric-couchdb:" + imageTag,
 		Environment: []string{
 			"COUCHDB_USER=",
 			"COUCHDB_PASSWORD=",

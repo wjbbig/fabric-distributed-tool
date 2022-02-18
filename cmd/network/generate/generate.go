@@ -1,12 +1,16 @@
 package generate
 
 import (
+	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/utils"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
+	"github.com/wjbbig/fabric-distributed-tool/network"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 var logger = mylogger.NewLogger()
@@ -58,8 +62,8 @@ func resetFlags() {
 	flags.BoolVar(&ifCouchdb, "couchdb", false, "If use couchdb")
 	flags.BoolVar(&ccInitRequired, "initcc", false, "If chaincode needs init")
 	flags.Int64VarP(&ccSequence, "seq", "s", 1, "Chaincode sequence for fabric v2.0")
-	flags.BoolVar(&bootstrap, "bootstrap", false, "Initial ")
-	flags.BoolVar(&extend, "extend", false, "")
+	flags.BoolVar(&bootstrap, "bootstrap", false, "Initialize the network configuration file")
+	flags.BoolVar(&extend, "extend", false, "Extend the network configuration file")
 }
 
 var (
@@ -77,10 +81,22 @@ var (
 					return err
 				}
 			}
-
-			if _, err := os.Stat(dataDir); err != nil {
+			if _, err = os.Stat(dataDir); err != nil {
 				_ = os.MkdirAll(dataDir, 0755)
+			} else {
+				data, err := ioutil.ReadFile(filepath.Join(dataDir, network.DefaultNetworkConfigName))
+				if err == nil && data != nil && len(data) != 0 {
+					var flag string
+					fmt.Printf("an existing network configuration file was found in the %s，overwrite all？Y or N\t", dataDir)
+					fmt.Scanf("%s", &flag)
+					if strings.ToUpper(flag) == "Y" {
+						if err := os.RemoveAll(dataDir); err != nil {
+							return err
+						}
+					}
+				}
 			}
+
 			switch {
 			case bootstrap:
 				if err := utils.DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy, ccInitRequired, ccSequence, ifCouchdb, peerUrls, ordererUrls, fabricVersion); err != nil {

@@ -49,7 +49,7 @@ func GenerateConfigtx(dataDir, consensus, channelId, fversion string, networkCon
 	return nil
 }
 
-func GenerateDockerCompose(dataDir string, peerNodes, ordererNodes []*network.Node, couchdb bool) error {
+func GenerateDockerCompose(dataDir string, peerNodes, ordererNodes []*network.Node, imageTags []string, couchdb bool, ca bool) error {
 	peersByOrg := make(map[string][]*network.Node)
 	for _, peerNode := range peerNodes {
 		peersByOrg[peerNode.OrgId] = append(peersByOrg[peerNode.OrgId], peerNode)
@@ -73,7 +73,7 @@ func GenerateDockerCompose(dataDir string, peerNodes, ordererNodes []*network.No
 		var extraHosts []string
 		extraHosts = append(extraHosts, spliceHostnameAndIP(peer, peerNodes)...)
 		extraHosts = append(extraHosts, spliceHostnameAndIP(peer, ordererNodes)...)
-		if err := docker_compose.GeneratePeerDockerComposeFile(dataDir, peer, gossipUrl, extraHosts, couchdb); err != nil {
+		if err := docker_compose.GeneratePeerDockerComposeFile(dataDir, peer, gossipUrl, extraHosts, imageTags, couchdb); err != nil {
 			return err
 		}
 	}
@@ -81,7 +81,7 @@ func GenerateDockerCompose(dataDir string, peerNodes, ordererNodes []*network.No
 		var extraHosts []string
 		extraHosts = append(extraHosts, spliceHostnameAndIP(orderer, peerNodes)...)
 		extraHosts = append(extraHosts, spliceHostnameAndIP(orderer, ordererNodes)...)
-		if err := docker_compose.GenerateOrdererDockerComposeFile(dataDir, orderer, extraHosts); err != nil {
+		if err := docker_compose.GenerateOrdererDockerComposeFile(dataDir, orderer, imageTags[0], extraHosts); err != nil {
 			return err
 		}
 	}
@@ -131,7 +131,13 @@ func ReadSSHConfigFromNetwork(networkConfig *network.NetworkConfig) (*sshutil.SS
 		}
 	}
 	for _, node := range networkConfig.GetOrdererNodes() {
-		if err := sshUtil.Add(node.GetHostname(), node.Username, node.Password, fmt.Sprintf("%s:%d", node.Host, node.SSHPort), node.Type, node.Couch); err != nil {
+		if err := sshUtil.Add(node.GetHostname(), node.Username, node.Password, fmt.Sprintf("%s:%d", node.Host, node.SSHPort), node.Type, false); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, node := range networkConfig.GetCANodes() {
+		if err := sshUtil.Add(node.GetHostname(), node.Username, node.Password, fmt.Sprintf("%s:%d", node.Host, node.SSHPort), node.Type, false); err != nil {
 			return nil, err
 		}
 	}
@@ -239,7 +245,6 @@ func startupNode(dataDir, name string, client *sshutil.SSHClient) error {
 	if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s up -d", dockerComposeFilePath)); err != nil {
 		logger.Info(err.Error())
 	}
-	// TODO start ca if chosen
 	return nil
 }
 
@@ -491,7 +496,7 @@ func DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId
 	if err := GenerateConfigtx(dataDir, consensus, channelId, fVersion, networkConfig); err != nil {
 		return err
 	}
-	if err := GenerateDockerCompose(dataDir, networkConfig.GetPeerNodes(), networkConfig.GetOrdererNodes(), ifCouchdb); err != nil {
+	if err := GenerateDockerCompose(dataDir, networkConfig.GetPeerNodes(), networkConfig.GetOrdererNodes(), networkConfig.GetImageTags(), ifCouchdb, false); err != nil {
 		return err
 	}
 	if err := GenerateConnectionProfile(dataDir, channelId, networkConfig); err != nil {
@@ -697,7 +702,7 @@ func DoExtendNodeCommand(dataDir string, couchdb bool, peers, orderers []string)
 		return err
 	}
 	// generate docker-compose file
-	if err := GenerateDockerCompose(dataDir, newPeerNodes, newOrdererNodes, couchdb); err != nil {
+	if err := GenerateDockerCompose(dataDir, newPeerNodes, newOrdererNodes, nc.GetImageTags(), couchdb, false); err != nil {
 		return err
 	}
 	// update connection-profile
@@ -807,4 +812,57 @@ func DoNewOrgPeerJoinChannel(dataDir string, channelId, nodeName string) error {
 		return err
 	}
 	return nil
+}
+
+func DoCreateCANodeForOrg(dataDir, orgId, enrollId, enrollSecret string) error {
+	// store ca info
+	//config, err := network.UnmarshalNetworkConfig(dataDir)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//port := utils.GetRandomPort()
+	//if err = config.CreateCANode(dataDir, orgId, enrollId, enrollSecret, port); err != nil {
+	//	return err
+	//}
+	//// generate docker-compose file of ca node
+	//domain := config.GetOrgDomain(orgId)
+	//if domain == "" {
+	//	return errors.Errorf("org %s does not exist", domain)
+	//}
+	//if err = docker_compose.GenerateCA(dataDir, orgId, domain, port, config.CAImageTag, enrollId, enrollSecret); err != nil {
+	//	return err
+	//}
+	//// update connection-profile
+	//profile, err := connectionprofile.UnmarshalConnectionProfile(dataDir)
+	//if err != nil {
+	//	return err
+	//}
+	//node, caInfo := config.GetCAByOrgId(orgId)
+	//if err = profile.ExtendCANodeByOrg(dataDir, node, caInfo); err != nil {
+	//	return err
+	//}
+	//// sftp docker-compose file
+	//sshUtil, err := ReadSSHConfigFromNetwork(config)
+	//if err != nil {
+	//	return err
+	//}
+	//defer sshUtil.CloseAll()
+	//sshClient := sshUtil.GetClientByName(node.Name)
+	//dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-ca.yaml", orgId))
+	//if err = sshClient.Sftp(dockerComposeFilePath, dataDir); err != nil {
+	//	return err
+	//}
+	//// run ca node
+	//dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-ca.yaml", orgId))
+	//if err := sshClient.RunCmd(fmt.Sprintf("docker-compose -f %s up -d", dockerComposeFilePath)); err != nil {
+	//	logger.Info(err.Error())
+	//}
+	// enroll registrar
+	sdk, err := sdkutil.NewFabricSDKDriver(filepath.Join(dataDir, connectionprofile.DefaultConnProfileName))
+	if err != nil {
+		return err
+	}
+	defer sdk.Close()
+	return sdk.Enroll(orgId, enrollId, enrollSecret)
 }

@@ -12,17 +12,28 @@ import (
 )
 
 const (
-	defaultNetworkConfigName = "networkconfig.yaml"
+	DefaultNetworkConfigName = "networkconfig.yaml"
 	PeerNode                 = "peer"
 	OrdererNode              = "orderer"
+	CANode                   = "ca"
+	defaultV14ImageTag       = "1.4.4"
+	defaultV20ImageTag       = "2.2.5"
+	defaultCAImageTag        = "1.4.9"
+	defaultCouchDBImageTag   = "0.4.22"
+	defaultCAEnrollId        = "admin"
+	defaultCAEnrollSecret    = "adminpw"
 )
 
 type NetworkConfig struct {
-	Name       string                `yaml:"name,omitempty"`
-	Version    string                `yaml:"version,omitempty"`
-	Channels   map[string]*Channel   `yaml:"channels,omitempty"`
-	Nodes      map[string]*Node      `yaml:"nodes,omitempty"`
-	Chaincodes map[string]*Chaincode `yaml:"chaincodes,omitempty"`
+	Name          string                `yaml:"name,omitempty"`
+	Version       string                `yaml:"version,omitempty"`
+	NodeImageTag  string                `yaml:"node_image_tag,omitempty"`
+	CAImageTag    string                `yaml:"ca_image_tag,omitempty"`
+	CouchImageTag string                `yaml:"couch_image_tag,omitempty"`
+	Channels      map[string]*Channel   `yaml:"channels,omitempty"`
+	Nodes         map[string]*Node      `yaml:"nodes,omitempty"`
+	Cas           map[string]*CA        `yaml:"cas,omitempty"`
+	Chaincodes    map[string]*Chaincode `yaml:"chaincodes,omitempty"`
 }
 
 type Node struct {
@@ -37,6 +48,12 @@ type Node struct {
 	Host     string `yaml:"host,omitempty"`
 	SSHPort  int    `yaml:"ssh_port,omitempty"`
 	Couch    bool   `yaml:"couch,omitempty"`
+}
+
+type CA struct {
+	Name         string `json:"name,omitempty"`
+	EnrollId     string `json:"enroll_id,omitempty"`
+	EnrollSecret string `json:"enroll_secret,omitempty"`
 }
 
 type Channel struct {
@@ -70,6 +87,16 @@ func (nc *NetworkConfig) GetPeerNodes() (peerNodes []*Node) {
 	return
 }
 
+func (nc *NetworkConfig) GetOrgDomain(orgId string) string {
+	for _, node := range nc.Nodes {
+		if node.OrgId == orgId && node.Type == PeerNode {
+			return node.Domain
+		}
+	}
+
+	return ""
+}
+
 func (nc *NetworkConfig) GetOrdererNodes() (ordererNodes []*Node) {
 	for _, node := range nc.Nodes {
 		if node.Type == OrdererNode {
@@ -80,10 +107,54 @@ func (nc *NetworkConfig) GetOrdererNodes() (ordererNodes []*Node) {
 	return
 }
 
+func (nc *NetworkConfig) GetCANodes() (caNodes []*Node) {
+	for _, node := range nc.Nodes {
+		if node.Type == CANode {
+			node.hostname = node.Name
+			caNodes = append(caNodes, node)
+		}
+	}
+	return
+}
+
+func (nc *NetworkConfig) GetCAByOrgId(orgName string) (*Node, *CA) {
+	caName := fmt.Sprintf("ca_%s", orgName)
+	return nc.Nodes[caName], nc.Cas[caName]
+}
+
+func (nc *NetworkConfig) CreateCANode(dataDir, orgId, enrollId, enrollSecret string, port int) error {
+	nodes := nc.GetPeerNodes()
+	var node Node
+	for _, n := range nodes {
+		if n.OrgId == orgId {
+			node = *n
+		}
+	}
+	node.NodePort = port
+	node.Couch = false
+	node.Type = CANode
+
+	caName := fmt.Sprintf("ca_%s", node.OrgId)
+	node.Name = caName
+	nc.Nodes[caName] = &node
+	if enrollId == "" {
+		enrollId = defaultCAEnrollId
+	}
+	if enrollSecret == "" {
+		enrollSecret = defaultCAEnrollSecret
+	}
+	ca := &CA{caName, enrollId, enrollSecret}
+	if nc.Cas == nil {
+		nc.Cas = make(map[string]*CA)
+	}
+	nc.Cas[caName] = ca
+	return writeNetworkConfig(dataDir, nc)
+}
+
 func (nc *NetworkConfig) GetNodesByChannel(channelId string) (peerNodes []*Node, ordererNodes []*Node, err error) {
 	channel, exists := nc.Channels[channelId]
 	if !exists {
-		err = errors.Errorf("%s not exists", channelId)
+		err = errors.Errorf("channel %s does not exists", channelId)
 		return
 	}
 
@@ -214,6 +285,10 @@ func (nc *NetworkConfig) ExtendNode(dataDir string, couchdb bool, peers, orderer
 	return peerNodes, ordererNodes, writeNetworkConfig(dataDir, nc)
 }
 
+func (nc *NetworkConfig) GetImageTags() []string {
+	return []string{nc.NodeImageTag, nc.CAImageTag, nc.CouchImageTag}
+}
+
 func (nc *NetworkConfig) GetNode(nodeName string) *Node {
 	node, ok := nc.Nodes[nodeName]
 	if !ok {
@@ -226,8 +301,15 @@ func (nc *NetworkConfig) GetNode(nodeName string) *Node {
 
 func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string, networkVersion string) (*NetworkConfig, error) {
 	network := &NetworkConfig{
-		Name:    networkName,
-		Version: networkVersion,
+		Name:          networkName,
+		Version:       networkVersion,
+		CouchImageTag: defaultCouchDBImageTag,
+		CAImageTag:    defaultCAImageTag,
+	}
+	if networkVersion == "v1.4" {
+		network.NodeImageTag = defaultV14ImageTag
+	} else {
+		network.NodeImageTag = defaultV20ImageTag
 	}
 	if ccId != "" {
 		chaincode := &Chaincode{
@@ -254,7 +336,7 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 		channel.Peers = append(channel.Peers, node.hostname)
 	}
 	for _, url := range ordererUrls {
-		node, err := NewNode(url, OrdererNode, couchdb)
+		node, err := NewNode(url, OrdererNode, false)
 		if err != nil {
 			return nil, err
 		}
@@ -277,7 +359,7 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 }
 
 func writeNetworkConfig(dataDir string, nc *NetworkConfig) error {
-	filePath := filepath.Join(dataDir, defaultNetworkConfigName)
+	filePath := filepath.Join(dataDir, DefaultNetworkConfigName)
 	data, err := yaml.Marshal(nc)
 	if err != nil {
 		return errors.Wrapf(err, "yaml marshal failed")
@@ -289,7 +371,7 @@ func writeNetworkConfig(dataDir string, nc *NetworkConfig) error {
 }
 
 func UnmarshalNetworkConfig(fileDir string) (*NetworkConfig, error) {
-	filePath := filepath.Join(fileDir, defaultNetworkConfigName)
+	filePath := filepath.Join(fileDir, DefaultNetworkConfigName)
 	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return nil, errors.Wrap(err, "error reading networkconfig file")
@@ -312,9 +394,6 @@ func NewNode(url string, nodeType string, couchdb bool) (*Node, error) {
 		return nil, err
 	}
 	name, orgId, domain := utils.SplitNameOrgDomain(hostname)
-	if nodeType == OrdererNode {
-		couchdb = false
-	}
 	return &Node{
 		hostname: hostname,
 		Name:     name,

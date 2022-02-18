@@ -12,35 +12,35 @@ func TestGenerateTestNetworkConnProfile(t *testing.T) {
 	connProfile.Version = "1.0.0"
 
 	// client config
-	client := Client{
+	client := &Client{
 		Organization: "Org1",
-		Logger:       Logger{"info"},
-		CryptoConfig: CryptoConfig{"${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}"},
-		CredentialStore: CredentialStore{
+		Logger:       &Logger{"info"},
+		CryptoConfig: &CryptoConfig{"${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}"},
+		CredentialStore: &CredentialStore{
 			Path:        "/tmp/state-store",
-			CryptoStore: CryptoStore{"/tmp/msp"},
+			CryptoStore: &CryptoStore{"/tmp/msp"},
 		},
-		BCCSP: BCCSP{BCCSPSecurity{
+		BCCSP: &BCCSP{&BCCSPSecurity{
 			Enable:        true,
-			Default:       BCCSPDefault{"SW"},
+			Default:       &BCCSPDefault{"SW"},
 			HashAlgorithm: "SHA2",
 			SoftVerify:    true,
 			Level:         256,
 		}},
-		TLSCerts: TLSCerts{
+		TLSCerts: &TLSCerts{
 			SystemCertPool: true,
-			TLSClient: TLSClient{
-				Key:  Key{"${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key"},
-				Cert: Cert{"${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt"},
+			TLSClient: &TLSClient{
+				Key:  &Key{"${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key"},
+				Cert: &Cert{"${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt"},
 			},
 		},
 	}
 	connProfile.Client = client
 
 	// channels
-	channels := map[string]Channel{
+	channels := map[string]*Channel{
 		"mychannel": {
-			Peers: map[string]ChannelPeer{
+			Peers: map[string]*ChannelPeer{
 				"peer0.org1.example.com": {
 					EndorsingPeer:  true,
 					ChaincodeQuery: true,
@@ -53,7 +53,7 @@ func TestGenerateTestNetworkConnProfile(t *testing.T) {
 	connProfile.Channels = channels
 
 	// organizations config
-	organizations := map[string]Organization{
+	organizations := map[string]*Organization{
 		"Org1": {
 			MSPId:      "Org1MSP",
 			CryptoPath: "peerOrganizations/org1.example.com/users/{username}@org1.example.com/msp",
@@ -68,10 +68,10 @@ func TestGenerateTestNetworkConnProfile(t *testing.T) {
 	connProfile.Organizations = organizations
 
 	// orderer config
-	orderers := map[string]Orderer{
+	orderers := map[string]*Orderer{
 		"orderer.example.com": {
 			URL: "orderer.example.com:7050",
-			GRPCOptions: GRPCOptions{
+			GRPCOptions: &GRPCOptions{
 				SSLTargetNameOverride: "orderer.example.com",
 				KeepAliveTime:         "0s",
 				KeepAliveTimeout:      "20s",
@@ -79,16 +79,16 @@ func TestGenerateTestNetworkConnProfile(t *testing.T) {
 				FailFast:              false,
 				AllowInsecure:         false,
 			},
-			TLSCACerts: TLSCACert{Path: "${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/ordererOrganizations/example.com/tlsca/tlsca.example.com-cert.pem"},
+			TLSCACerts: &TLSCACert{Path: "${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/ordererOrganizations/example.com/tlsca/tlsca.example.com-cert.pem"},
 		},
 	}
 	connProfile.Orderers = orderers
 
 	// peers config
-	peers := map[string]Peer{
+	peers := map[string]*Peer{
 		"peer0.org1.example.com": {
 			URL: "peer0.org1.example.com:7051",
-			GRPCOptions: GRPCOptions{
+			GRPCOptions: &GRPCOptions{
 				SSLTargetNameOverride: "peer0.org1.example.com",
 				KeepAliveTime:         "0s",
 				KeepAliveTimeout:      "20s",
@@ -96,24 +96,24 @@ func TestGenerateTestNetworkConnProfile(t *testing.T) {
 				FailFast:              false,
 				AllowInsecure:         false,
 			},
-			TLSCACerts: TLSCACert{Path: "${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem"},
+			TLSCACerts: &TLSCACert{Path: "${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem"},
 		},
 	}
 	connProfile.Peers = peers
 
 	// ca config
-	cas := map[string]CertificateAuthority{
+	cas := map[string]*CertificateAuthority{
 		"ca.org1.example.com": {
 			URL: "https://ca.org1.example.com:7054",
-			Registrar: Registrar{
+			Registrar: &Registrar{
 				EnrollId:     "admin",
 				EnrollSecret: "adminpw",
 			},
-			TLSCACert: TLSCACert{
+			TLSCACert: &TLSCACert{
 				Path: "${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem",
-				TLSClient: TLSClient{
-					Key:  Key{"${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key"},
-					Cert: Cert{"${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt"},
+				TLSClient: &TLSClient{
+					Key:  &Key{"${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key"},
+					Cert: &Cert{"${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt"},
 				},
 			},
 			CAName: "ca.org1.example.com",

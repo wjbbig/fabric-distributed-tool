@@ -528,3 +528,15 @@ func (driver *FabricSDKDriver) InitCC(ccId, channelId, orgId, fcn string, args [
 	logger.Infof("init chaincode %s success, txid=%s", ccId, resp.TransactionID)
 	return nil
 }
+
+// ===============ca functions=================
+
+// Enroll pulls user's certs to local directory
+func (driver *FabricSDKDriver) Enroll(orgId, enrollId, enrollSecret string) error {
+	client, err := mspclient.New(driver.fabSDK.Context(), mspclient.WithOrg(orgId))
+	if err != nil {
+		return err
+	}
+
+	return client.Enroll(enrollId, mspclient.WithSecret(enrollSecret))
+}

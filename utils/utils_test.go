@@ -33,3 +33,9 @@ func TestAbs(t *testing.T) {
 
 	t.Log(abs)
 }
+
+func TestGetOutBoundIP(t *testing.T) {
+	ip, err := GetOutBoundIP()
+	require.NoError(t, err)
+	t.Log(ip)
+}

@@ -213,8 +213,8 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 		Logger:       &Logger{"info"},
 		CryptoConfig: &CryptoConfig{filepath.Join(filePath, defaultCryptoConfigDirName)},
 		CredentialStore: &CredentialStore{
-			Path:        "/tmp/state-store",
-			CryptoStore: &CryptoStore{"/tmp/msp"},
+			Path:        filepath.Join(filePath, "state-store"),
+			CryptoStore: &CryptoStore{filepath.Join(filePath, "msp")},
 		},
 		BCCSP: &BCCSP{&BCCSPSecurity{
 			Enable:        true,
@@ -449,6 +449,54 @@ func (profile *ConnProfile) ExtendNodesAndOrgs(dataDir string, peers, orderers [
 			profile.Organizations[node.OrgId] = org
 		}
 	}
+	data, err := yaml.Marshal(profile)
+	if err != nil {
+		return errors.Wrap(err, "yaml marshal failed")
+	}
+	filePath := filepath.Join(dataDir, DefaultConnProfileName)
+	if err := utils.WriteFile(filePath, data, 0755); err != nil {
+		return errors.Wrap(err, "write file failed")
+	}
+	return nil
+}
+
+func (profile *ConnProfile) ExtendCANodeByOrg(dataDir string, caNode *network.Node, caInfo *network.CA) error {
+	organization, ok := profile.Organizations[caNode.OrgId]
+	if !ok {
+		return errors.Errorf("org %s does not exist", organization)
+	}
+
+	organization.CertificateAuthorities = append(organization.CertificateAuthorities, caNode.Name)
+
+	if profile.CertificateAuthorities == nil {
+		profile.CertificateAuthorities = make(map[string]*CertificateAuthority)
+	}
+
+	profile.CertificateAuthorities[caNode.Name] = &CertificateAuthority{
+		URL: fmt.Sprintf("http://%s:%d", caNode.Name, caNode.NodePort),
+		Registrar: &Registrar{
+			EnrollId:     caInfo.EnrollId,
+			EnrollSecret: caInfo.EnrollSecret,
+		},
+		TLSCACert: &TLSCACert{
+			Path: filepath.Join(dataDir, defaultCryptoConfigDirName, "peerOrganizations", caNode.Domain,
+				"tlsca", fmt.Sprintf("tlsca.%s-cert.pem", caNode.Domain)),
+			TLSClient: &TLSClient{
+				Key: &Key{filepath.Join(dataDir, defaultCryptoConfigDirName, "peerOrganizations", caNode.Domain,
+					"users", fmt.Sprintf("User1@%s", caNode.Domain), "tls", "client.key")},
+				Cert: &Cert{filepath.Join(dataDir, defaultCryptoConfigDirName, "peerOrganizations", caNode.Domain,
+					"users", fmt.Sprintf("User1@%s", caNode.Domain), "tls", "client.crt")},
+			},
+		},
+		CAName: "ca-" + caNode.OrgId,
+	}
+
+	profile.EntityMatchers["certificateAuthority"] = append(profile.EntityMatchers["certificateAuthority"], &EntityMatcher{
+		Pattern:            caNode.Name,
+		UrlSubstitutionExp: fmt.Sprintf("%s:%d", caNode.Host, caNode.NodePort),
+		MappedHost:         caNode.Name,
+	})
+
 	data, err := yaml.Marshal(profile)
 	if err != nil {
 		return errors.Wrap(err, "yaml marshal failed")
