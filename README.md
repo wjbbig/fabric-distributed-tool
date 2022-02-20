@@ -1,8 +1,6 @@
 # fabric-distributed-tool
 fabric-distributed-tool is a tool for distributed deployment of hyperledger fabric. It's easy to build up or update a fabric network with this tool. Now it supports fabric v1.4.x and v2.
 ## Install
-
----
 ~~~bash
 go build -o fdt cmd/root_cmd.go
 ~~~
@@ -11,8 +9,6 @@ or using Makefile
 make build
 ~~~
 ## How to use
-
----
 Use the bootstrap command, the form of node is hostname:port@server_username@server_ip:ssh_port:server_password.
 ~~~bash
 fdt network generate --bootstrap -d ./fdtdata -p peer.testpeerorg1:7051@@127.0.0.1:22: -p peer.testpeerorg2:8051@@127.0.0.1:22: -o orderer.testordererorg:7050@@127.0.0.1:22: \
@@ -85,8 +81,6 @@ fdt network shutdown -n testnetwork
 You can find more command in [scripts/localnet.sh](https://github.com/wjbbig/fabric-distributed-tool/blob/master/scripts/localnet.sh).
 
 ## Supported Features
-
----
 * buildup and shutdown fabric network
 * deploy or upgrade chaincode (only support chaincode-go)
 * create or join channel
@@ -95,6 +89,4 @@ You can find more command in [scripts/localnet.sh](https://github.com/wjbbig/fab
 * register, enroll, revoke user with fabric-ca
 
 ## Licensing
-
----
 Current fabric-distributed-tool code is released under [Apache License 2.0]( http://www.apache.org/licenses/)
