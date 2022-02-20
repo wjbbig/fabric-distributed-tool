@@ -123,6 +123,10 @@ func (nc *NetworkConfig) GetCAByOrgId(orgName string) (*Node, *CA) {
 }
 
 func (nc *NetworkConfig) CreateCANode(dataDir, orgId, enrollId, enrollSecret string, port int) error {
+	caName := fmt.Sprintf("ca_%s", orgId)
+	if _, exists := nc.Nodes[caName]; exists {
+		return errors.Errorf("ca node %s exist", caName)
+	}
 	nodes := nc.GetPeerNodes()
 	var node Node
 	for _, n := range nodes {
@@ -133,8 +137,6 @@ func (nc *NetworkConfig) CreateCANode(dataDir, orgId, enrollId, enrollSecret str
 	node.NodePort = port
 	node.Couch = false
 	node.Type = CANode
-
-	caName := fmt.Sprintf("ca_%s", node.OrgId)
 	node.Name = caName
 	nc.Nodes[caName] = &node
 	if enrollId == "" {

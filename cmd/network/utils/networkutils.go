@@ -816,48 +816,48 @@ func DoNewOrgPeerJoinChannel(dataDir string, channelId, nodeName string) error {
 
 func DoCreateCANodeForOrg(dataDir, orgId, enrollId, enrollSecret string) error {
 	// store ca info
-	//config, err := network.UnmarshalNetworkConfig(dataDir)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//port := utils.GetRandomPort()
-	//if err = config.CreateCANode(dataDir, orgId, enrollId, enrollSecret, port); err != nil {
-	//	return err
-	//}
-	//// generate docker-compose file of ca node
-	//domain := config.GetOrgDomain(orgId)
-	//if domain == "" {
-	//	return errors.Errorf("org %s does not exist", domain)
-	//}
-	//if err = docker_compose.GenerateCA(dataDir, orgId, domain, port, config.CAImageTag, enrollId, enrollSecret); err != nil {
-	//	return err
-	//}
-	//// update connection-profile
-	//profile, err := connectionprofile.UnmarshalConnectionProfile(dataDir)
-	//if err != nil {
-	//	return err
-	//}
-	//node, caInfo := config.GetCAByOrgId(orgId)
-	//if err = profile.ExtendCANodeByOrg(dataDir, node, caInfo); err != nil {
-	//	return err
-	//}
-	//// sftp docker-compose file
-	//sshUtil, err := ReadSSHConfigFromNetwork(config)
-	//if err != nil {
-	//	return err
-	//}
-	//defer sshUtil.CloseAll()
-	//sshClient := sshUtil.GetClientByName(node.Name)
-	//dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-ca.yaml", orgId))
-	//if err = sshClient.Sftp(dockerComposeFilePath, dataDir); err != nil {
-	//	return err
-	//}
-	//// run ca node
-	//dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-ca.yaml", orgId))
-	//if err := sshClient.RunCmd(fmt.Sprintf("docker-compose -f %s up -d", dockerComposeFilePath)); err != nil {
-	//	logger.Info(err.Error())
-	//}
+	config, err := network.UnmarshalNetworkConfig(dataDir)
+	if err != nil {
+		return err
+	}
+
+	port := utils.GetRandomPort()
+	if err = config.CreateCANode(dataDir, orgId, enrollId, enrollSecret, port); err != nil {
+		return err
+	}
+	// generate docker-compose file of ca node
+	domain := config.GetOrgDomain(orgId)
+	if domain == "" {
+		return errors.Errorf("org %s does not exist", domain)
+	}
+	if err = docker_compose.GenerateCA(dataDir, orgId, domain, port, config.CAImageTag, enrollId, enrollSecret); err != nil {
+		return err
+	}
+	// update connection-profile
+	profile, err := connectionprofile.UnmarshalConnectionProfile(dataDir)
+	if err != nil {
+		return err
+	}
+	node, caInfo := config.GetCAByOrgId(orgId)
+	if err = profile.ExtendCANodeByOrg(dataDir, node, caInfo); err != nil {
+		return err
+	}
+	// sftp docker-compose file
+	sshUtil, err := ReadSSHConfigFromNetwork(config)
+	if err != nil {
+		return err
+	}
+	defer sshUtil.CloseAll()
+	sshClient := sshUtil.GetClientByName(node.Name)
+	dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-ca.yaml", orgId))
+	if err = sshClient.Sftp(dockerComposeFilePath, dataDir); err != nil {
+		return err
+	}
+	// run ca node
+	dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-ca.yaml", orgId))
+	if err := sshClient.RunCmd(fmt.Sprintf("docker-compose -f %s up -d", dockerComposeFilePath)); err != nil {
+		logger.Info(err.Error())
+	}
 	// enroll registrar
 	sdk, err := sdkutil.NewFabricSDKDriver(filepath.Join(dataDir, connectionprofile.DefaultConnProfileName))
 	if err != nil {
