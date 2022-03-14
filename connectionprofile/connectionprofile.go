@@ -171,9 +171,9 @@ type GRPCOptions struct {
 	SSLTargetNameOverride string `yaml:"ssl-target-name-override,omitempty"`
 	KeepAliveTime         string `yaml:"keep-alive-time,omitempty"`
 	KeepAliveTimeout      string `yaml:"keep-alive-timeout,omitempty"`
-	KeepAlivePermit       bool   `yaml:"keep-alive-permit,omitempty"`
-	FailFast              bool   `yaml:"fail-fast,omitempty"`
-	AllowInsecure         bool   `yaml:"allow-insecure,omitempty"`
+	KeepAlivePermit       bool   `yaml:"keep-alive-permit"`
+	FailFast              bool   `yaml:"fail-fast"`
+	AllowInsecure         bool   `yaml:"allow-insecure"`
 }
 
 // ============================CA=================================
@@ -233,12 +233,14 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 	peers := make(map[string]*Peer)
 	organizations := make(map[string]*Organization)
 	entityMatchers := make(map[string][]*EntityMatcher)
+	var peerOrgName string
 	for _, url := range peerUrls {
 		args := strings.Split(url, ":")
 		if len(args) != 3 {
 			return errors.Errorf("the peer url should be url:port:ip, but got %s", url)
 		}
 		_, orgName, domain := utils.SplitNameOrgDomain(args[0])
+		peerOrgName = orgName
 		// peer
 		peers[args[0]] = &Peer{
 			URL: fmt.Sprintf("%s:%s", args[0], args[1]),
@@ -281,6 +283,7 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 		}
 		entityMatchers["peer"] = append(entityMatchers["peer"], em)
 	}
+	client.Organization = peerOrgName
 	connProfile.Peers = peers
 	connProfile.Channels = map[string]*Channel{
 		channelId: channel,

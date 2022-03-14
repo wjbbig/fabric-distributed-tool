@@ -17,7 +17,7 @@ const (
 	OrdererNode              = "orderer"
 	CANode                   = "ca"
 	defaultV14ImageTag       = "1.4.4"
-	defaultV20ImageTag       = "2.2.5"
+	defaultV20ImageTag       = "2.4.3"
 	defaultCAImageTag        = "1.4.9"
 	defaultCouchDBImageTag   = "0.4.22"
 	defaultCAEnrollId        = "admin"
