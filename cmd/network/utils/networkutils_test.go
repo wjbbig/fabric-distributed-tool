@@ -15,6 +15,6 @@ func TestDoCreateCANodeForOrg(t *testing.T) {
 	dataDir, err := filepath.Abs("../../../fdtdata")
 	require.NoError(t, err)
 
-	err = DoCreateCANodeForOrg(dataDir, "testpeerorg2", "admin", "adminpw")
+	err = DoCreateCANodeForOrg(dataDir, "testpeerorg1", "admin", "adminpw")
 	require.NoError(t, err)
 }

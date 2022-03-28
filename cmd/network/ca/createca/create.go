@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/utils"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
+	"path/filepath"
 )
 
 var logger = mylogger.NewLogger()
@@ -22,9 +23,15 @@ var (
 
 var createCACmd = &cobra.Command{
 	Use:   "createca",
-	Short: "deploy a new chaincode on the specified channel",
-	Long:  "deploy a new chaincode on the specified channel",
+	Short: "start the fabric-ca for specified organization",
+	Long:  "start the fabric-ca for specified organization",
 	Run: func(cmd *cobra.Command, args []string) {
+		var err error
+		if !filepath.IsAbs(dataDir) {
+			if dataDir, err = filepath.Abs(dataDir); err != nil {
+				logger.Error(err.Error())
+			}
+		}
 		if err := utils.DoCreateCANodeForOrg(dataDir, orgId, enrollId, enrollSecret); err != nil {
 			logger.Error(err.Error())
 		}

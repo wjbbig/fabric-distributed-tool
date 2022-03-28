@@ -389,7 +389,8 @@ func (driver *FabricSDKDriver) InstallCCV2(ccId, channelId, orgId, peerEndpoint 
 		return "", errors.Wrap(err, "install chaincode failed")
 	}
 	if resp != nil && resp[0].PackageID != packageId {
-		return "", errors.Wrap(err, "packageId from install response is not equal to the id from computed")
+		return "", errors.Errorf("packageId from install response is not equal to the id from computed, should be %s, but got %s", packageId,
+			resp[0].PackageID)
 	}
 
 	return packageId, nil
@@ -529,6 +530,36 @@ func (driver *FabricSDKDriver) InitCC(ccId, channelId, orgId, fcn string, args [
 	return nil
 }
 
+func (driver *FabricSDKDriver) QueryCC(ccId, channelId, orgId, fcn string, args []string, peerEndpoints []string) ([]byte, error) {
+	clientChannelContext := driver.fabSDK.ChannelContext(channelId, fabsdk.WithUser("User1"), fabsdk.WithOrg(orgId))
+	client, err := channel.New(clientChannelContext)
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to create new channel client")
+	}
+	resp, err := client.Query(channel.Request{ChaincodeID: ccId, Fcn: fcn, Args: parseCCArgs(args)},
+		channel.WithRetry(retry.DefaultChannelOpts),
+		channel.WithTargetEndpoints(peerEndpoints...))
+	if err != nil {
+		return nil, errors.Wrap(err, "query chaincode failed")
+	}
+	return resp.Payload, nil
+}
+
+func (driver *FabricSDKDriver) InvokeCC(ccId, channelId, orgId, fcn string, args []string, peerEndpoints []string) ([]byte, error) {
+	clientChannelContext := driver.fabSDK.ChannelContext(channelId, fabsdk.WithUser("User1"), fabsdk.WithOrg(orgId))
+	client, err := channel.New(clientChannelContext)
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to create new channel client")
+	}
+	resp, err := client.Execute(channel.Request{ChaincodeID: ccId, Fcn: fcn, Args: parseCCArgs(args)},
+		channel.WithRetry(retry.DefaultChannelOpts),
+		channel.WithTargetEndpoints(peerEndpoints...))
+	if err != nil {
+		return nil, errors.Wrap(err, "invoke chaincode failed")
+	}
+	return resp.Payload, nil
+}
+
 // ===============ca functions=================
 
 // Enroll pulls user's certs to local directory
@@ -539,4 +570,33 @@ func (driver *FabricSDKDriver) Enroll(orgId, enrollId, enrollSecret string) erro
 	}
 
 	return client.Enroll(enrollId, mspclient.WithSecret(enrollSecret))
+}
+
+func (driver *FabricSDKDriver) Register(orgId, username, secret, caName string) (string, error) {
+	client, err := mspclient.New(driver.fabSDK.Context(), mspclient.WithOrg(orgId))
+	if err != nil {
+		return "", err
+	}
+
+	return client.Register(&mspclient.RegistrationRequest{
+		Name:        username,
+		Type:        "user",
+		Affiliation: "org1.department1",
+		CAName:      caName,
+		Secret:      secret,
+	})
+}
+
+func (driver *FabricSDKDriver) Revoke(orgId, username, caName string) error {
+	client, err := mspclient.New(driver.fabSDK.Context(), mspclient.WithOrg(orgId))
+	if err != nil {
+		return err
+	}
+
+	_, err = client.Revoke(&mspclient.RevocationRequest{
+		Name:   username,
+		Reason: "user revoke",
+		CAName: caName,
+	})
+	return err
 }

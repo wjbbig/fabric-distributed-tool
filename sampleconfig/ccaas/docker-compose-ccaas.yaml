@@ -1,0 +1,13 @@
+version: "2"
+networks:
+  fabric_network:
+services:
+  ccaas1:
+    image: ccaas-basic:latest
+    container_name: testpeerorg1_basic_ccaas
+    restart: always
+    environment:
+      - CHAINCODE_ID=basic:4df5ce572671cb08326e5d215c3d836615e4970e55ddb520db2e77be60ecfb70
+      - CHAINCODE_SERVER_ADDRESS=0.0.0.0:9999
+    ports:
+      - "9999:9999"

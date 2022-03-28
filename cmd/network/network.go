@@ -2,6 +2,7 @@ package network
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/wjbbig/fabric-distributed-tool/cmd/network/ca/call"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/ca/createca"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/chaincode/deploycc"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/chaincode/upgradecc"
@@ -37,4 +38,5 @@ func init() {
 	networkCmd.AddCommand(existorgpeer.Cmd())
 	networkCmd.AddCommand(createchannel.Cmd())
 	networkCmd.AddCommand(createca.Cmd())
+	networkCmd.AddCommand(call.Cmd())
 }

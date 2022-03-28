@@ -23,6 +23,7 @@ var (
 	initRequired bool
 	initFunc     string
 	initParam    string
+	ccaas        bool
 )
 
 var installChaincodeCmd = &cobra.Command{
@@ -30,7 +31,7 @@ var installChaincodeCmd = &cobra.Command{
 	Short: "deploy a new chaincode on the specified channel",
 	Long:  "deploy a new chaincode on the specified channel",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := utils.DoDeployccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam, initRequired); err != nil {
+		if err := utils.DoDeployccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam, initRequired, ccaas); err != nil {
 			logger.Error(err.Error())
 		}
 		return nil
@@ -55,4 +56,5 @@ func resetFlags() {
 	flags.StringVarP(&ccPolicy, "ccpolicy", "P", "", "The endorsement policy of new chaincode")
 	flags.StringVarP(&initParam, "initparam", "i", "", "The initial param of new chaincode")
 	flags.StringVarP(&initFunc, "initfunc", "f", "", "The initial function of new chaincode")
+	flags.BoolVar(&ccaas, "ccaas", false, "Deploy chaincode as CCaaS mode")
 }

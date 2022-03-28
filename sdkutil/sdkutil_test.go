@@ -118,3 +118,21 @@ func TestGetConfigBlock(t *testing.T) {
 		fmt.Println(group)
 	}
 }
+
+func TestQueryCCWithCCaaS(t *testing.T) {
+	sdk, err := NewFabricSDKDriver("/Users/wujiabin/codework/golang/fabric-distributed-tool/fdtdata/connection-config.yaml")
+	require.NoError(t, err)
+	defer sdk.Close()
+	// query metadata
+	value, err := sdk.QueryCC("basic", "mychannel", "testpeerorg1", "org.hyperledger.fabric:GetMetadata", nil, []string{"peer.testpeerorg1"})
+	require.NoError(t, err)
+	t.Log(string(value))
+
+	_, err = sdk.InvokeCC("basic", "mychannel", "testpeerorg1", "Save", []string{"abc", "abc"}, []string{"peer.testpeerorg1"})
+	require.NoError(t, err)
+
+	value, err = sdk.QueryCC("basic", "mychannel", "testpeerorg1", "Query", []string{"abc"}, []string{"peer.testpeerorg1"})
+	require.NoError(t, err)
+
+	t.Log(string(value))
+}

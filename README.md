@@ -82,7 +82,7 @@ You can find more command in [scripts/localnet.sh](https://github.com/wjbbig/fab
 
 ## Supported Features
 * buildup and shutdown fabric network
-* deploy or upgrade chaincode (only support chaincode-go)
+* deploy or upgrade chaincode (only support chaincode-go), ccaas
 * create or join channel
 * extend new peer or orderer node
 * start or stop the specified node

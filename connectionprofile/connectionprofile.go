@@ -464,6 +464,10 @@ func (profile *ConnProfile) ExtendNodesAndOrgs(dataDir string, peers, orderers [
 }
 
 func (profile *ConnProfile) ExtendCANodeByOrg(dataDir string, caNode *network.Node, caInfo *network.CA) error {
+	dataDir, err := filepath.Abs(dataDir)
+	if err != nil {
+		return err
+	}
 	organization, ok := profile.Organizations[caNode.OrgId]
 	if !ok {
 		return errors.Errorf("org %s does not exist", organization)
@@ -496,7 +500,7 @@ func (profile *ConnProfile) ExtendCANodeByOrg(dataDir string, caNode *network.No
 
 	profile.EntityMatchers["certificateAuthority"] = append(profile.EntityMatchers["certificateAuthority"], &EntityMatcher{
 		Pattern:            caNode.Name,
-		UrlSubstitutionExp: fmt.Sprintf("%s:%d", caNode.Host, caNode.NodePort),
+		UrlSubstitutionExp: fmt.Sprintf("http://%s:%d", caNode.Host, caNode.NodePort),
 		MappedHost:         caNode.Name,
 	})
 

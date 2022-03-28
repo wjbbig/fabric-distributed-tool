@@ -223,7 +223,8 @@ func GenerateCA(filePath string, orgId string, domain string, port int, imageTag
 	dockerCompose.Networks = map[string]ExternalNetwork{
 		defaultNetworkName: {},
 	}
-	caFileName := fmt.Sprintf("%s%s-ca.yaml", defaultDockerComposeFile, domain)
+	domain = strings.ReplaceAll(domain, "_", "-")
+	caFileName := fmt.Sprintf("%sca-%s.yaml", defaultDockerComposeFile, domain)
 	filePath = filepath.Join(filePath, caFileName)
 	data, err := yaml.Marshal(dockerCompose)
 	if err != nil {
