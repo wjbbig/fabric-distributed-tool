@@ -13,4 +13,5 @@ sshutil/*.yaml
 sshutil/ssh_test.go
 connectionprofile/*.yaml
 network/*.yaml
+fdtdata/*
 fdt

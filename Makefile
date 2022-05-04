@@ -3,4 +3,5 @@ build:
 
 clean:
 	rm -rf fdtdata/*
+	rm -rf $(HOME)/.fdt/network.json
 
