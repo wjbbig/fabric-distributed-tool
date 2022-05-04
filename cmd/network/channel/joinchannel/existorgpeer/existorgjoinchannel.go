@@ -10,6 +10,7 @@ import (
 var logger = mylogger.NewLogger()
 
 var (
+	network   string
 	dataDir   string
 	channelId string
 	node      string
@@ -23,9 +24,10 @@ func init() {
 
 func resetFlags() {
 	flags = &pflag.FlagSet{}
+	flags.StringVarP(&network, "network", "n", "", "The name of fabric network")
 	flags.StringVarP(&dataDir, "datadir", "d", "", "Path to file containing fabric needed")
 	flags.StringVarP(&channelId, "channel", "c", "", "The channel which peer wants to join in")
-	flags.StringVarP(&node, "node", "n", "", "Node name")
+	flags.StringVar(&node, "node", "", "Node name")
 
 }
 
@@ -34,6 +36,11 @@ var existOrgPeerJoinChannelCmd = &cobra.Command{
 	Short: "Peers of organizations that already exist in the channel join the channel",
 	Long:  "Peers of organizations that already exist in the channel join the channel",
 	Run: func(cmd *cobra.Command, args []string) {
+		var err error
+		dataDir, err = utils.GetNetworkPathByName(dataDir, network)
+		if err != nil {
+			logger.Error(err.Error())
+		}
 		if err := utils.DoExistOrgPeerJoinChannel(dataDir, channelId, node); err != nil {
 			logger.Error(err.Error())
 		}

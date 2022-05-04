@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -279,12 +280,6 @@ func stopNodeByNodeName(dataDir string, client *sshutil.SSHClient, name string) 
 		}
 	}
 
-	// TODO: delete chaincode container and image
-	// if client.NodeType == network.PeerNode {
-	// 	if err := client.RunCmd("docker rm -f $(docker ps -a -q |  grep \"dev*\"  | awk '{print $1}')"); err != nil {
-	// 		logger.Info(err.Error())
-	// 	}
-	// }
 	return nil
 }
 
@@ -506,6 +501,14 @@ func upgradeCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccP
 
 func DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam,
 	ccPolicy string, ccInitRequired bool, sequence int64, ifCouchdb bool, peerUrls, ordererUrls []string, fVersion string) error {
+	config, err := network.Load()
+	// config does not exist
+	if err != nil {
+		config = network.NewHomeDirConfig()
+	}
+	if err := config.AddNetwork(networkName, dataDir); err != nil {
+		return err
+	}
 	networkConfig, err := GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy, ccInitRequired, sequence, ifCouchdb, peerUrls, ordererUrls, fVersion)
 	if err != nil {
 		return err
@@ -520,6 +523,10 @@ func DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId
 		return err
 	}
 	if err := GenerateConnectionProfile(dataDir, channelId, networkConfig); err != nil {
+		return err
+	}
+
+	if err := config.Store(); err != nil {
 		return err
 	}
 	return nil
@@ -920,4 +927,73 @@ func DoCallFabricCAFunc(dataDir, orgId, username, secret, funcName string) (stri
 		}
 	}
 	return secret, nil
+}
+
+func DoNetworkImport(name, dataDir string) error {
+	hdc, err := network.Load()
+	if err != nil {
+		return err
+	}
+	networkPath := hdc.GetNetworkPath(name)
+	if networkPath != "" {
+		return errors.Errorf("network %s exists, current path is %s", name, dataDir)
+	}
+
+	stat, err := os.Stat(dataDir)
+	if err != nil {
+		return err
+	}
+
+	if !stat.IsDir() {
+		return errors.Errorf("%s should be a directory", dataDir)
+	}
+
+	dir, err := ioutil.ReadDir(dataDir)
+	if err != nil {
+		return err
+	}
+
+	fileMap := map[string]bool{
+		"networkconfig.yaml":     false,
+		"crypto-config.yaml":     false,
+		"connection-config.yaml": false,
+		"configtx.yaml":          false,
+	}
+
+	for _, info := range dir {
+		fileMap[info.Name()] = true
+	}
+	for fName, b := range fileMap {
+		if !b {
+			return errors.Errorf("config file %s not exists", fName)
+		}
+	}
+
+	hdc.AddNetwork(name, dataDir)
+	return hdc.Store()
+}
+
+func GetNetworkPathByName(dataDir, name string) (string, error) {
+	var err error
+	if dataDir != "" {
+		if !filepath.IsAbs(dataDir) {
+			if dataDir, err = filepath.Abs(dataDir); err != nil {
+				return "", err
+			}
+		}
+		return dataDir, nil
+	}
+	// use network name
+	if name == "" {
+		return "", errors.New("network name is nil")
+	}
+	networkPathConf, err := network.Load()
+	if err != nil {
+		return "", err
+	}
+	path := networkPathConf.GetNetworkPath(name)
+	if path == "" {
+		return "", errors.New("network does not exist")
+	}
+	return path, nil
 }

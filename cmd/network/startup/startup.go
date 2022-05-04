@@ -5,12 +5,12 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/utils"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
-	"path/filepath"
 )
 
 var logger = mylogger.NewLogger()
 
 var (
+	network   string
 	dataDir   string
 	startOnly bool
 )
@@ -25,16 +25,11 @@ var startupCmd = &cobra.Command{
 	Short: "start the fabric network",
 	Long:  "start the fabric network",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if dataDir == "" {
-			logger.Error("datadir is not specified")
-		}
 		var err error
-		if !filepath.IsAbs(dataDir) {
-			if dataDir, err = filepath.Abs(dataDir); err != nil {
-				return err
-			}
+		dataDir, err = utils.GetNetworkPathByName(dataDir, network)
+		if err != nil {
+			return err
 		}
-
 		if err := utils.DoStartupCommand(dataDir, startOnly); err != nil {
 			logger.Error(err.Error())
 			return nil
@@ -53,6 +48,7 @@ var flags *pflag.FlagSet
 
 func resetFlags() {
 	flags = &pflag.FlagSet{}
+	flags.StringVarP(&network, "network", "n", "", "The name of fabric network")
 	flags.StringVarP(&dataDir, "datadir", "d", "", "Path to file containing fabric needed")
-	flags.BoolVar(&startOnly, "startonly", false, "Just start the docker container")
+	flags.BoolVar(&startOnly, "startonly", false, "Only starting the docker container")
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/channel/joinchannel/existorgpeer"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/channel/joinchannel/neworgpeer"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/generate"
+	netimport "github.com/wjbbig/fabric-distributed-tool/cmd/network/import"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/node/startnode"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/node/stopnode"
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/shutdown"
@@ -39,4 +40,5 @@ func init() {
 	networkCmd.AddCommand(createchannel.Cmd())
 	networkCmd.AddCommand(createca.Cmd())
 	networkCmd.AddCommand(call.Cmd())
+	networkCmd.AddCommand(netimport.Cmd())
 }

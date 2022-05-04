@@ -14,6 +14,7 @@ func init() {
 }
 
 var (
+	network      string
 	channelId    string
 	dataDir      string
 	ccId         string
@@ -31,6 +32,11 @@ var installChaincodeCmd = &cobra.Command{
 	Short: "deploy a new chaincode on the specified channel",
 	Long:  "deploy a new chaincode on the specified channel",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		var err error
+		dataDir, err = utils.GetNetworkPathByName(dataDir, network)
+		if err != nil {
+			return err
+		}
 		if err := utils.DoDeployccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam, initRequired, ccaas); err != nil {
 			logger.Error(err.Error())
 		}
@@ -47,14 +53,15 @@ var flags *pflag.FlagSet
 
 func resetFlags() {
 	flags = &pflag.FlagSet{}
+	flags.StringVarP(&network, "network", "n", "", "The name of fabric network")
 	flags.StringVarP(&dataDir, "datadir", "d", "", "Path to file containing fabric needed")
 	flags.StringVarP(&channelId, "channelid", "c", "", "The specified channel to deploy new chaincode")
-	flags.StringVarP(&ccId, "ccid", "n", "", "The name of new chaincode")
+	flags.StringVar(&ccId, "ccid", "", "The name of new chaincode")
 	flags.StringVarP(&ccPath, "ccpath", "p", "", "The path of new chaincode")
 	flags.StringVarP(&ccVersion, "ccversion", "v", "", "The version of new chaincode")
 	flags.BoolVar(&initRequired, "initcc", false, "If the new chaincode needs initialization")
-	flags.StringVarP(&ccPolicy, "ccpolicy", "P", "", "The endorsement policy of new chaincode")
-	flags.StringVarP(&initParam, "initparam", "i", "", "The initial param of new chaincode")
-	flags.StringVarP(&initFunc, "initfunc", "f", "", "The initial function of new chaincode")
+	flags.StringVar(&ccPolicy, "policy", "", "The endorsement policy of new chaincode")
+	flags.StringVarP(&initParam, "param", "i", "", "The initial param of new chaincode")
+	flags.StringVarP(&initFunc, "func", "f", "", "The initial function of new chaincode")
 	flags.BoolVar(&ccaas, "ccaas", false, "Deploy chaincode as CCaaS mode")
 }

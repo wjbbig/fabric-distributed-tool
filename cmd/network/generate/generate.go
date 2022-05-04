@@ -34,6 +34,7 @@ var (
 	ifCouchdb      bool
 	bootstrap      bool
 	extend         bool
+	file           bool
 )
 
 // peer0.org1.example.com:7050@username@127.0.0.1:22:password
@@ -72,26 +73,26 @@ var (
 		Short: "generate necessary files of fabric.",
 		Long:  "generate crypto-config.yaml, configtx.yaml and docker-compose.yaml.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if dataDir == "" {
-				logger.Error("datadir is not specified")
-			}
 			var err error
-			if !filepath.IsAbs(dataDir) {
-				if dataDir, err = filepath.Abs(dataDir); err != nil {
-					return err
-				}
+			dataDir, err = utils.GetNetworkPathByName(dataDir, "")
+			if err != nil {
+				return err
 			}
 			if _, err = os.Stat(dataDir); err != nil {
 				_ = os.MkdirAll(dataDir, 0755)
 			} else {
 				data, err := ioutil.ReadFile(filepath.Join(dataDir, network.DefaultNetworkConfigName))
 				if err == nil && data != nil && len(data) != 0 {
-					var flag string
-					fmt.Printf("an existing network configuration file was found in the %s，overwrite all？Y or N\t", dataDir)
-					fmt.Scanf("%s", &flag)
-					if strings.ToUpper(flag) == "Y" {
-						if err := os.RemoveAll(dataDir); err != nil {
-							return err
+					if file {
+
+					} else {
+						var flag string
+						fmt.Printf("an existing network configuration file was found in the %s，overwrite all? [y/n]\t", dataDir)
+						fmt.Scanf("%s", &flag)
+						if strings.ToUpper(flag) == "Y" {
+							if err := os.RemoveAll(dataDir); err != nil {
+								return err
+							}
 						}
 					}
 				}
