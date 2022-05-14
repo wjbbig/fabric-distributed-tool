@@ -13,22 +13,21 @@ var (
 	network   string
 	dataDir   string
 	peers     []string
-	orderers  []string
 	channelId string
-	consensus string
 )
 
 var createChannelCmd = &cobra.Command{
 	Use:   "createchannel",
 	Short: "Create a new channel in the specified fabric network.",
-	Long:  "Create a new channel in the specified fabric network, only support existing peer or orderer.",
+	// TODO:
+	Long: "Create a new channel in the specified fabric network, only support existing peer or orderer.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var err error
 		dataDir, err = utils.GetNetworkPathByName(dataDir, network)
 		if err != nil {
 			return err
 		}
-		if err := utils.DoCreateChannelCommand(dataDir, channelId, consensus, peers, orderers); err != nil {
+		if err := utils.DoCreateChannelCommand(dataDir, channelId, peers); err != nil {
 			logger.Error(err.Error())
 		}
 		return nil
@@ -52,7 +51,5 @@ func resetFlags() {
 	flags.StringVarP(&dataDir, "datadir", "d", "", "Path to file containing fabric needed")
 	// generate -p a -p b -p c
 	flags.StringArrayVarP(&peers, "peer", "p", nil, "Hostname of fabric peers")
-	flags.StringArrayVarP(&orderers, "orderer", "o", nil, "Hostname of fabric orderers")
 	flags.StringVarP(&channelId, "channelid", "c", "", "Fabric channel name")
-	flags.StringVarP(&consensus, "consensus", "C", "", "Orderer consensus type of fabric network")
 }

@@ -3,11 +3,14 @@ package sdkutil
 import (
 	"fmt"
 	"github.com/stretchr/testify/require"
+	"github.com/wjbbig/fabric-distributed-tool/fabricconfig"
+	"github.com/wjbbig/fabric-distributed-tool/network"
+	"github.com/wjbbig/fabric-distributed-tool/tools/configtxgen/genesisconfig"
 	"testing"
 	"time"
 )
 
-const connectionFilePath = "/opt/fdt/connection-config.yaml"
+const connectionFilePath = "../fdtdata/connection-config.yaml"
 
 func TestFabricSDKDriver_CreateChannel(t *testing.T) {
 	sdk, err := NewFabricSDKDriver(connectionFilePath)
@@ -103,7 +106,7 @@ func TestGetConfigBlock(t *testing.T) {
 	require.NoError(t, err)
 	defer sdk.Close()
 
-	block, err := sdk.getConfigBlock("mychannel", "testordererorg", "orderer.testordererorg")
+	block, err := sdk.getConfigBlock("fabric-genesis-channel", "testordererorg", "orderer.testordererorg")
 	require.NoError(t, err)
 
 	t.Log(block.Header.Number)
@@ -113,10 +116,41 @@ func TestGetConfigBlock(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, config)
 
-	groups := config.ChannelGroup.Groups["Application"].Groups
+	groups := config.ChannelGroup.Groups["Consortiums"].Groups
 	for _, group := range groups {
 		fmt.Println(group)
 	}
+}
+
+func TestUpdateSystemChannel(t *testing.T) {
+	sdk, err := NewFabricSDKDriver(connectionFilePath)
+	require.NoError(t, err)
+	defer sdk.Close()
+
+	block, err := sdk.getConfigBlock("fabric-genesis-channel", "testordererorg", "orderer.testordererorg")
+	require.NoError(t, err)
+
+	t.Log(block.Header.Number)
+	t.Log(len(block.Data.Data))
+
+	config, err := getChannelConfigFromBlock(block)
+	require.NoError(t, err)
+	require.NotNil(t, config)
+
+	dataDir := "/Users/wujiabin/codework/golang/fabric-distributed-tool/fdtdata"
+
+	nc, err := network.UnmarshalNetworkConfig(dataDir)
+	require.NoError(t, err)
+
+	orgs := fabricconfig.BuildConsortiumOrgs(dataDir, []*network.Node{
+		nc.Nodes["peer.testpeerorg3"],
+		nc.Nodes["peer.testpeerorg1"],
+	}, fabricconfig.FabricVersion_V20)
+	cg, err := fabricconfig.BuildConsortiumConfigGroup(&genesisconfig.Consortium{Organizations: orgs})
+	require.NoError(t, err)
+	err = sdk.ExtendConsortium(fabricconfig.DefaultGenesisChannel, fmt.Sprintf(fabricconfig.DefaultConsortiumNameTemplate, "thirdchannel"),
+		"testordererorg", "orderer.testordererorg", cg)
+	require.NoError(t, err)
 }
 
 func TestQueryCCWithCCaaS(t *testing.T) {

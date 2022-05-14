@@ -25,6 +25,7 @@ const (
 )
 
 type NetworkConfig struct {
+	Consensus     string                `yaml:"consensus,omitempty"`
 	Name          string                `yaml:"name,omitempty"`
 	Version       string                `yaml:"version,omitempty"`
 	NodeImageTag  string                `yaml:"node_image_tag,omitempty"`
@@ -37,17 +38,20 @@ type NetworkConfig struct {
 }
 
 type Node struct {
-	hostname string
-	Name     string `yaml:"name,omitempty"`
-	NodePort int    `json:"node_port,omitempty"`
-	Type     string `yaml:"type,omitempty"`
-	OrgId    string `yaml:"org_id,omitempty"`
-	Domain   string `yaml:"domain,omitempty"`
-	Username string `yaml:"username,omitempty"`
-	Password string `yaml:"password,omitempty"`
-	Host     string `yaml:"host,omitempty"`
-	SSHPort  int    `yaml:"ssh_port,omitempty"`
-	Couch    bool   `yaml:"couch,omitempty"`
+	hostname    string
+	Name        string `yaml:"name,omitempty"`
+	NodePort    int    `json:"node_port,omitempty"`
+	Type        string `yaml:"type,omitempty"`
+	OrgId       string `yaml:"org_id,omitempty"`
+	Domain      string `yaml:"domain,omitempty"`
+	Username    string `yaml:"username,omitempty"`
+	Password    string `yaml:"password,omitempty"`
+	Host        string `yaml:"host,omitempty"`
+	SSHPort     int    `yaml:"ssh_port,omitempty"`
+	Couch       bool   `yaml:"couch,omitempty"`
+	Dest        string `yaml:"dest,omitempty"`
+	Transferred bool   `yaml:"transferred,omitempty"` // check if the file of node has been transferred to dest dir
+	Start       bool   `yaml:"start,omitempty"`
 }
 
 type CA struct {
@@ -57,9 +61,7 @@ type CA struct {
 }
 
 type Channel struct {
-	Consensus  string              `yaml:"consensus,omitempty"`
 	Peers      []string            `yaml:"peers,omitempty"`
-	Orderers   []string            `yaml:"orderers,omitempty"`
 	Chaincodes []*ChannelChaincode `yaml:"chaincodes,omitempty"`
 }
 
@@ -164,10 +166,8 @@ func (nc *NetworkConfig) GetNodesByChannel(channelId string) (peerNodes []*Node,
 		nc.Nodes[peerName].hostname = peerName
 		peerNodes = append(peerNodes, nc.Nodes[peerName])
 	}
-	for _, ordererName := range channel.Orderers {
-		nc.Nodes[ordererName].hostname = ordererName
-		ordererNodes = append(ordererNodes, nc.Nodes[ordererName])
-	}
+
+	ordererNodes = nc.GetOrdererNodes()
 
 	return
 }
@@ -233,7 +233,7 @@ func (nc *NetworkConfig) UpgradeChaincode(dataDir, channelId, ccId, ccPath, ccVe
 	return writeNetworkConfig(dataDir, nc)
 }
 
-func (nc *NetworkConfig) ExtendChannel(dataDir, channelId, consensus string, peers, orderers []string) error {
+func (nc *NetworkConfig) ExtendChannel(dataDir, channelId string, peers []string) error {
 	_, exist := nc.Channels[channelId]
 	if exist {
 		return errors.Errorf("channel %s exists", channelId)
@@ -244,16 +244,9 @@ func (nc *NetworkConfig) ExtendChannel(dataDir, channelId, consensus string, pee
 			return errors.Errorf("peer %s does not exist", peer)
 		}
 	}
-	for _, orderer := range orderers {
-		_, exist := nc.Nodes[orderer]
-		if !exist {
-			return errors.Errorf("orderer %s does not exist", orderer)
-		}
-	}
+
 	channel := &Channel{
-		Consensus: consensus,
-		Peers:     peers,
-		Orderers:  orderers,
+		Peers: peers,
 	}
 	nc.Channels[channelId] = channel
 	return writeNetworkConfig(dataDir, nc)
@@ -261,7 +254,7 @@ func (nc *NetworkConfig) ExtendChannel(dataDir, channelId, consensus string, pee
 
 func (nc *NetworkConfig) ExtendNode(dataDir string, couchdb bool, peers, orderers []string) (peerNodes []*Node, ordererNodes []*Node, err error) {
 	for _, peer := range peers {
-		node, err := NewNode(peer, PeerNode, couchdb)
+		node, err := NewNode(peer, PeerNode, couchdb, dataDir)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -273,7 +266,7 @@ func (nc *NetworkConfig) ExtendNode(dataDir string, couchdb bool, peers, orderer
 		peerNodes = append(peerNodes, node)
 	}
 	for _, orderer := range orderers {
-		node, err := NewNode(orderer, OrdererNode, false)
+		node, err := NewNode(orderer, OrdererNode, false, dataDir)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -302,8 +295,12 @@ func (nc *NetworkConfig) GetNode(nodeName string) *Node {
 }
 
 func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string, networkVersion string) (*NetworkConfig, error) {
+	if err := validateBasic(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy, sequence, peerUrls, ordererUrls, networkVersion); err != nil {
+		return nil, err
+	}
 	network := &NetworkConfig{
 		Name:          networkName,
+		Consensus:     consensus,
 		Version:       networkVersion,
 		CouchImageTag: defaultCouchDBImageTag,
 		CAImageTag:    defaultCAImageTag,
@@ -327,10 +324,10 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 		}
 	}
 	channels := make(map[string]*Channel)
-	channel := &Channel{Consensus: consensus}
+	channel := &Channel{}
 	nodes := make(map[string]*Node)
 	for _, url := range peerUrls {
-		node, err := NewNode(url, PeerNode, couchdb)
+		node, err := NewNode(url, PeerNode, couchdb, fileDir)
 		if err != nil {
 			return nil, err
 		}
@@ -338,12 +335,11 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 		channel.Peers = append(channel.Peers, node.hostname)
 	}
 	for _, url := range ordererUrls {
-		node, err := NewNode(url, OrdererNode, false)
+		node, err := NewNode(url, OrdererNode, false, fileDir)
 		if err != nil {
 			return nil, err
 		}
 		nodes[node.hostname] = node
-		channel.Orderers = append(channel.Orderers, node.hostname)
 	}
 	if ccId != "" {
 		channel.Chaincodes = append(channel.Chaincodes, &ChannelChaincode{
@@ -358,6 +354,13 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 		return nil, err
 	}
 	return network, nil
+}
+
+func validateBasic(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy string, sequence int64, peerUrls, ordererUrls []string, networkVersion string) error {
+	if fileDir == "" {
+
+	}
+	return nil
 }
 
 func writeNetworkConfig(dataDir string, nc *NetworkConfig) error {
@@ -385,7 +388,7 @@ func UnmarshalNetworkConfig(fileDir string) (*NetworkConfig, error) {
 	return networkConfig, nil
 }
 
-func NewNode(url string, nodeType string, couchdb bool) (*Node, error) {
+func NewNode(url string, nodeType string, couchdb bool, dest string) (*Node, error) {
 	hostname, nodePortStr, username, host, sshPortStr, password := utils.SplitUrlParam(url)
 	nodePort, err := strconv.Atoi(nodePortStr)
 	if err != nil {
@@ -408,6 +411,7 @@ func NewNode(url string, nodeType string, couchdb bool) (*Node, error) {
 		Host:     host,
 		SSHPort:  sshPort,
 		Couch:    couchdb,
+		Dest:     dest,
 	}, nil
 }
 

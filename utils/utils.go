@@ -160,3 +160,28 @@ func GetOutBoundIP() (ip string, err error) {
 	ip = strings.Split(localAddr.String(), ":")[0]
 	return
 }
+
+func SliceContains(v string, s []string) bool {
+	for _, t := range s {
+		if strings.Contains(t, v) {
+			return true
+		}
+	}
+	return false
+}
+
+func DeduplicatedSlice(s []string) []string {
+	var deduplicatedSlice []string
+	m := make(map[string]struct{})
+	for _, s2 := range s {
+		m[s2] = struct{}{}
+	}
+	if len(s) != len(m) {
+		for k := range m {
+			deduplicatedSlice = append(deduplicatedSlice, k)
+		}
+	} else {
+		deduplicatedSlice = s
+	}
+	return deduplicatedSlice
+}

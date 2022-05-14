@@ -23,8 +23,8 @@ func NewSSHUtil() *SSHUtil {
 	return &SSHUtil{make(map[string]*SSHClient)}
 }
 
-func (su *SSHUtil) Add(peerName, username, password, address, nodeType string, needCouchdb bool) error {
-	cli, err := newSSHClient(username, password, address, nodeType, needCouchdb)
+func (su *SSHUtil) Add(peerName, username, password, address, nodeType, locPath, desPath string, needCouchdb bool) error {
+	cli, err := newSSHClient(username, password, address, nodeType, locPath, desPath, needCouchdb)
 	if err != nil {
 		return err
 	}
@@ -50,13 +50,15 @@ type SSHClient struct {
 	Username  string
 	Password  string
 	Address   string
+	LocalPath string
+	DestPath  string
 	NodeType  string
 	NeedCouch bool
 	local     bool
 	client    *ssh.Client
 }
 
-func newSSHClient(username, password, address, nodeType string, needCouchdb bool) (*SSHClient, error) {
+func newSSHClient(username, password, address, nodeType, locPath, desPath string, needCouchdb bool) (*SSHClient, error) {
 	local, err := utils.CheckLocalIp(address)
 	if err != nil {
 		return nil, err
@@ -68,6 +70,8 @@ func newSSHClient(username, password, address, nodeType string, needCouchdb bool
 		NodeType:  nodeType,
 		NeedCouch: needCouchdb,
 		local:     local,
+		LocalPath: locPath,
+		DestPath:  desPath,
 	}
 
 	if !local {

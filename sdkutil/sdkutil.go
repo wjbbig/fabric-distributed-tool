@@ -171,6 +171,26 @@ func (driver *FabricSDKDriver) UpdateCC(ccId, ccPath, ccVersion, channelId, orgI
 	return nil
 }
 
+func (driver *FabricSDKDriver) ExtendConsortium(systemChannelName, consortiumName, existOrgId, ordererEndpoint string, cg *common.ConfigGroup) error {
+	systemChannelConfigBlock, err := driver.getConfigBlock(systemChannelName, existOrgId, ordererEndpoint)
+	if err != nil {
+		return errors.Wrapf(err, "get config block of channel %s failed", systemChannelName)
+	}
+	chConfig, err := getChannelConfigFromBlock(systemChannelConfigBlock)
+	if err != nil {
+		return errors.Wrap(err, "get channel config from block failed")
+	}
+	cloneMsg := proto.Clone(chConfig)
+	origin := cloneMsg.(*common.Config)
+	if _, ok := chConfig.ChannelGroup.Groups["Consortiums"]; !ok {
+		return errors.Wrapf(err, "cannot find consortium group in the system channel config block")
+	}
+	chConfig.ChannelGroup.Groups["Consortiums"].Groups[consortiumName] = cg
+
+	_, err = saveChannel(systemChannelName, ordererEndpoint, []string{existOrgId}, origin, chConfig, driver.fabSDK)
+	return err
+}
+
 func (driver *FabricSDKDriver) ExtendOrShrinkChannel(actionType, channelId, newOrgId, ordererEndpoint string, existOrgIds []string, cg *common.ConfigGroup) error {
 	configBlock, err := driver.getConfigBlock(channelId, existOrgIds[0], ordererEndpoint)
 	if err != nil {
@@ -189,7 +209,6 @@ func (driver *FabricSDKDriver) ExtendOrShrinkChannel(actionType, channelId, newO
 }
 
 func getConfigEnvelopeBytes(configUpdate *common.ConfigUpdate) ([]byte, error) {
-
 	var buf bytes.Buffer
 	if err := protolator.DeepMarshalJSON(&buf, configUpdate); err != nil {
 		return nil, err
@@ -297,6 +316,52 @@ func extendOrShrinkChannel(actionType string, channelId string, newOrgId, ordere
 	default:
 		return "", errors.Errorf("unknown action type, got %s", actionType)
 	}
+
+	return saveChannel(channelId, ordererEndpoint, existOrgIds, origin, chConfig, sdk)
+	//var buf bytes.Buffer
+	//if err := protolator.DeepMarshalJSON(&buf, chConfig); err != nil {
+	//	return "", err
+	//}
+	//proposedChannelConfigJSON := buf.String()
+	//
+	//configUpdate, err := getConfigUpdate(origin, channelId, proposedChannelConfigJSON)
+	//if err != nil {
+	//	return "", err
+	//}
+	//
+	//envelopeBytes, err := getConfigEnvelopeBytes(configUpdate)
+	//if err != nil {
+	//	return "", err
+	//}
+	//
+	//configReader := bytes.NewReader(envelopeBytes)
+	//ctx := sdk.Context(fabsdk.WithUser(defaultUsername), fabsdk.WithOrg(existOrgIds[0]))
+	//var signingIdentities []msp.SigningIdentity
+	//for _, id := range existOrgIds {
+	//	mspClient, err := mspclient.New(sdk.Context(), mspclient.WithOrg(id))
+	//	if err != nil {
+	//		return "", err
+	//	}
+	//	adminIdentity, err := mspClient.GetSigningIdentity(defaultUsername)
+	//	if err != nil {
+	//		return "", err
+	//	}
+	//	signingIdentities = append(signingIdentities, adminIdentity)
+	//}
+	//req := resmgmt.SaveChannelRequest{ChannelID: channelId, ChannelConfig: configReader, SigningIdentities: signingIdentities}
+	//resMgmtClient, err := resmgmt.New(ctx)
+	//if err != nil {
+	//	return "", err
+	//}
+	//
+	//resp, err := resMgmtClient.SaveChannel(req, resmgmt.WithOrdererEndpoint(ordererEndpoint))
+	//if err != nil {
+	//	return "", err
+	//}
+	//return string(resp.TransactionID), err
+}
+
+func saveChannel(channelId, ordererEndpoint string, existOrgIds []string, origin, chConfig *common.Config, sdk *fabsdk.FabricSDK) (string, error) {
 	var buf bytes.Buffer
 	if err := protolator.DeepMarshalJSON(&buf, chConfig); err != nil {
 		return "", err

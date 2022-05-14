@@ -24,15 +24,15 @@ import (
 )
 
 const (
-	defaultConfigtxFileName   = "configtx.yaml"
-	defaultConsortiumName     = "FabricConsortiums"
-	defaultGenesisName        = "FabricGenesis"
-	OrdererType_SOLO          = "solo"
-	OrdererType_ETCDRAFT      = "etcdraft"
-	FabricVersion_V14         = "v1.4"
-	FabricVersion_V20         = "v2.0"
-	defaultChannelProfileName = "FabricChannel"
-	defaultGenesisChannel     = "fabric-genesis-channel"
+	defaultConfigtxFileName           = "configtx.yaml"
+	DefaultConsortiumNameTemplate     = "%s-consortium"
+	defaultGenesisName                = "FabricGenesis"
+	OrdererType_SOLO                  = "solo"
+	OrdererType_ETCDRAFT              = "etcdraft"
+	FabricVersion_V14                 = "v1.4"
+	FabricVersion_V20                 = "v2.0"
+	defaultChannelProfileNameTemplate = "%s-channel"
+	DefaultGenesisChannel             = "fabric-genesis-channel"
 )
 
 type Configtx struct {
@@ -128,9 +128,13 @@ func orderPeerOrdererByOrg(nodes []*network.Node) map[string][]*network.Node {
 	return orderedUrl
 }
 
-func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers []*network.Node, version string) error {
+type ConfigtxApplicationChannelEntity struct {
+	ChannelId string
+	Peers     []string
+}
+
+func GenerateConfigtxFile(filePath, ordererType string, peers, orderers []*network.Node, entities []*ConfigtxApplicationChannelEntity, version string) error {
 	logger.Infof("begin to generate configtx.yaml, consensus type=%s", ordererType)
-	defer logger.Info("finish generating configtx.yaml")
 	var configtx Configtx
 	var consenters []ConfigtxConsenter
 	var ordererOrganizations []ConfigtxOrganization
@@ -220,8 +224,9 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 		}
 	}
 
-	var peerOrganizations []ConfigtxOrganization
+	peerOrganizations := map[string]ConfigtxOrganization{}
 	peerOrgsPath := filepath.Join(filePath, "crypto-config", "peerOrganizations")
+
 	peerMap := orderPeerOrdererByOrg(peers)
 	for _, peerNodes := range peerMap {
 		rand.Seed(time.Now().UnixNano())
@@ -259,7 +264,7 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 				Rule: fmt.Sprintf("OR('%s.member')", randomPeer.OrgId),
 			}
 		}
-		peerOrganizations = append(peerOrganizations, peerOrganization)
+		peerOrganizations[randomPeer.OrgId] = peerOrganization
 	}
 
 	application := ConfigtxApplication{
@@ -284,7 +289,6 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 			"event/Block":                          "/Channel/Application/Readers",
 			"event/FilteredBlock":                  "/Channel/Application/Readers",
 		},
-		Organizations: peerOrganizations,
 		Policies: map[string]ConfigtxPolicy{
 			fconfigtx.ReadersPolicyKey: {
 				Type: fconfigtx.ImplicitMetaPolicyType,
@@ -315,68 +319,11 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 		application.Capabilities["V1_4_2"] = true
 	}
 
-	switch ordererType {
-	case OrdererType_ETCDRAFT:
-		ordererApplication := application
-		ordererApplication.Organizations = ordererOrganizations
-		configtx.Profiles = map[string]ConfigtxProfile{
-			defaultGenesisName: {
-				Orderer:      orderer,
-				Application:  ordererApplication,
-				Capabilities: capabilities,
-				Consortiums: map[string]ConfigtxConsortium{
-					defaultConsortiumName: {
-						Organizations: peerOrganizations,
-					},
-				},
-				Policies: map[string]ConfigtxPolicy{
-					fconfigtx.ReadersPolicyKey: {
-						Type: fconfigtx.ImplicitMetaPolicyType,
-						Rule: "ANY Readers",
-					},
-					fconfigtx.WritersPolicyKey: {
-						Type: fconfigtx.ImplicitMetaPolicyType,
-						Rule: "ANY Writers",
-					},
-					fconfigtx.AdminsPolicyKey: {
-						Type: fconfigtx.ImplicitMetaPolicyType,
-						Rule: "MAJORITY Admins",
-					},
-				},
-			},
-		}
-	default:
-		configtx.Profiles = map[string]ConfigtxProfile{
-			defaultGenesisName: {
-				Orderer:      orderer,
-				Capabilities: capabilities,
-				Consortiums: map[string]ConfigtxConsortium{
-					defaultConsortiumName: {
-						Organizations: peerOrganizations,
-					},
-				},
-				Policies: map[string]ConfigtxPolicy{
-					fconfigtx.ReadersPolicyKey: {
-						Type: fconfigtx.ImplicitMetaPolicyType,
-						Rule: "ANY Readers",
-					},
-					fconfigtx.WritersPolicyKey: {
-						Type: fconfigtx.ImplicitMetaPolicyType,
-						Rule: "ANY Writers",
-					},
-					fconfigtx.AdminsPolicyKey: {
-						Type: fconfigtx.ImplicitMetaPolicyType,
-						Rule: "MAJORITY Admins",
-					},
-				},
-			},
-		}
-	}
-
-	configtx.Profiles[defaultChannelProfileName] = ConfigtxProfile{
-		Consortium:   defaultConsortiumName,
-		Application:  application,
+	// genesis block
+	genesisProfile := ConfigtxProfile{
+		Orderer:      orderer,
 		Capabilities: capabilities,
+		Consortiums:  make(map[string]ConfigtxConsortium),
 		Policies: map[string]ConfigtxPolicy{
 			fconfigtx.ReadersPolicyKey: {
 				Type: fconfigtx.ImplicitMetaPolicyType,
@@ -391,6 +338,50 @@ func GenerateConfigtxFile(filePath string, ordererType string, orderers, peers [
 				Rule: "MAJORITY Admins",
 			},
 		},
+	}
+	if ordererType == OrdererType_ETCDRAFT {
+		ordererApplication := application
+		ordererApplication.Organizations = ordererOrganizations
+		genesisProfile.Application = ordererApplication
+	}
+
+	for _, entity := range entities {
+		consortium := ConfigtxConsortium{}
+		for _, peerOrg := range entity.Peers {
+			consortium.Organizations = append(consortium.Organizations, peerOrganizations[peerOrg])
+		}
+		genesisProfile.Consortiums[fmt.Sprintf(DefaultConsortiumNameTemplate,
+			entity.ChannelId)] = consortium
+	}
+
+	configtx.Profiles = map[string]ConfigtxProfile{
+		defaultGenesisName: genesisProfile,
+	}
+
+	for _, entity := range entities {
+		channelApplication := application
+		for _, peerOrg := range entity.Peers {
+			channelApplication.Organizations = append(channelApplication.Organizations, peerOrganizations[peerOrg])
+		}
+		configtx.Profiles[fmt.Sprintf(defaultChannelProfileNameTemplate, entity.ChannelId)] = ConfigtxProfile{
+			Consortium:   fmt.Sprintf(DefaultConsortiumNameTemplate, entity.ChannelId),
+			Capabilities: capabilities,
+			Application:  channelApplication,
+			Policies: map[string]ConfigtxPolicy{
+				fconfigtx.ReadersPolicyKey: {
+					Type: fconfigtx.ImplicitMetaPolicyType,
+					Rule: "ANY Readers",
+				},
+				fconfigtx.WritersPolicyKey: {
+					Type: fconfigtx.ImplicitMetaPolicyType,
+					Rule: "ANY Writers",
+				},
+				fconfigtx.AdminsPolicyKey: {
+					Type: fconfigtx.ImplicitMetaPolicyType,
+					Rule: "MAJORITY Admins",
+				},
+			},
+		}
 	}
 
 	data, err := yaml.Marshal(configtx)
@@ -411,13 +402,13 @@ func GenerateGenesisBlockAndChannelTxAndAnchorPeerUsingBinary(fileDir string, ch
 		return errors.Wrapf(err, "failed to create directory, path=%s", channelArtifactsPath)
 	}
 
-	logger.Infof("begin to generate fabric genesis.block, genesis channel name is %s", defaultGenesisChannel)
+	logger.Infof("begin to generate fabric genesis.block, genesis channel name is %s", DefaultGenesisChannel)
 	var args []string
 	// ./configtxgen -profile TwoOrgsOrdererGenesis -channelID byfn-sys-channel -outputBlock ./channel-artifacts/genesis.block
 	args = []string{
 		fmt.Sprintf("--configPath=%s", fileDir),
 		fmt.Sprintf("--profile=%s", defaultGenesisName),
-		fmt.Sprintf("--channelID=%s", defaultGenesisChannel),
+		fmt.Sprintf("--channelID=%s", DefaultGenesisChannel),
 		fmt.Sprintf("--outputBlock=%s", filepath.Join(channelArtifactsPath, "genesis.block")),
 	}
 	if err := utils.RunLocalCmd(configtxgenPath, args...); err != nil {
@@ -429,7 +420,7 @@ func GenerateGenesisBlockAndChannelTxAndAnchorPeerUsingBinary(fileDir string, ch
 	logger.Infof("begin to generate channel.tx, channel=%s", channelId)
 	args = []string{
 		fmt.Sprintf("--configPath=%s", fileDir),
-		fmt.Sprintf("--profile=%s", defaultChannelProfileName),
+		fmt.Sprintf("--profile=%s", channelId+"-channel"),
 		fmt.Sprintf("--channelID=%s", channelId),
 		fmt.Sprintf("--outputCreateChannelTx=%s", filepath.Join(channelArtifactsPath, fmt.Sprintf("%s.tx", channelId))),
 	}
@@ -451,7 +442,7 @@ func GenerateGenesisBlockAndChannelTxAndAnchorPeerUsingBinary(fileDir string, ch
 		logger.Infof("begin to generate anchors.tx, org=%s", org)
 		args = []string{
 			fmt.Sprintf("--configPath=%s", fileDir),
-			fmt.Sprintf("--profile=%s", defaultChannelProfileName),
+			fmt.Sprintf("--profile=%s", channelId+"-channel"),
 			fmt.Sprintf("--channelID=%s", channelId),
 			fmt.Sprintf("--outputAnchorPeersUpdate=%s", filepath.Join(channelArtifactsPath, fmt.Sprintf("%sanchors.tx", org))),
 			fmt.Sprintf("--asOrg=%s", org),
@@ -471,16 +462,164 @@ func GenerateGenesisBlockAndChannelTxAndAnchorPeer(fileDir string, channelId str
 		return errors.Wrapf(err, "failed to create directory, path=%s", channelArtifactsPath)
 	}
 
-	logger.Infof("begin to generate fabric genesis.block, genesis channel name is %s", defaultGenesisChannel)
+	logger.Infof("begin to generate fabric genesis.block, genesis channel name is %s", DefaultGenesisChannel)
 	profileConfig := genesisconfig.Load(defaultGenesisName, fileDir)
 	outputBlockPath := filepath.Join(channelArtifactsPath, "genesis.block")
-	if err := doOutputBlock(profileConfig, defaultGenesisChannel, outputBlockPath); err != nil {
+	if err := doOutputBlock(profileConfig, DefaultGenesisChannel, outputBlockPath); err != nil {
 		return err
 	}
 	return GenerateChannelTxAndAnchorPeer(fileDir, channelId, nc)
 }
 
-// GenerateChannelTxAndAnchorPeer uses to create a new channel in an existing fabric network
+func ExtendChannelProfile(dataDir, version string, peers []*network.Node, entity *ConfigtxApplicationChannelEntity) error {
+	configtx := &Configtx{}
+	path := filepath.Join(dataDir, defaultConfigtxFileName)
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if err = yaml.Unmarshal(data, configtx); err != nil {
+		return err
+	}
+
+	var capabilities map[string]bool
+	if version == FabricVersion_V20 {
+		capabilities = map[string]bool{
+			"V2_0": true,
+		}
+	} else {
+		capabilities = map[string]bool{
+			"V1_4_3": true,
+		}
+	}
+
+	peerOrganizations := map[string]ConfigtxOrganization{}
+	peerOrgsPath := filepath.Join(dataDir, "crypto-config", "peerOrganizations")
+
+	peerMap := orderPeerOrdererByOrg(peers)
+	for _, peerNodes := range peerMap {
+		rand.Seed(time.Now().UnixNano())
+		peerIndex := rand.Intn(len(peerNodes))
+		randomPeer := peerNodes[peerIndex]
+		var anchorPeers []ConfigtxAnchorPeer
+		anchorPeer := ConfigtxAnchorPeer{
+			Host: randomPeer.GetHostname(),
+			Port: uint32(randomPeer.NodePort),
+		}
+		anchorPeers = append(anchorPeers, anchorPeer)
+		peerOrganization := ConfigtxOrganization{
+			Name:   randomPeer.OrgId,
+			ID:     randomPeer.OrgId,
+			MSPDir: filepath.Join(peerOrgsPath, randomPeer.Domain, "msp"),
+			Policies: map[string]ConfigtxPolicy{
+				fconfigtx.ReadersPolicyKey: {
+					Type: fconfigtx.SignaturePolicyType,
+					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.peer', '%[1]s.client')", randomPeer.OrgId),
+				},
+				fconfigtx.WritersPolicyKey: {
+					Type: fconfigtx.SignaturePolicyType,
+					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.client')", randomPeer.OrgId),
+				},
+				fconfigtx.AdminsPolicyKey: {
+					Type: fconfigtx.SignaturePolicyType,
+					Rule: fmt.Sprintf("OR('%s.admin')", randomPeer.OrgId),
+				},
+			},
+			AnchorPeers: anchorPeers,
+		}
+		if version == FabricVersion_V20 {
+			peerOrganization.Policies[fconfigtx.EndorsementPolicyKey] = ConfigtxPolicy{
+				Type: fconfigtx.SignaturePolicyType,
+				Rule: fmt.Sprintf("OR('%s.member')", randomPeer.OrgId),
+			}
+		}
+		peerOrganizations[randomPeer.OrgId] = peerOrganization
+	}
+
+	application := ConfigtxApplication{
+		ACLs: map[string]string{
+			"_lifecycle/CheckCommitReadiness":      "/Channel/Application/Writers",
+			"_lifecycle/CommitChaincodeDefinition": "/Channel/Application/Writers",
+			"_lifecycle/QueryChaincodeDefinition":  "/Channel/Application/Writers",
+			"_lifecycle/QueryChaincodeDefinitions": "/Channel/Application/Writers",
+			"lscc/ChaincodeExists":                 "/Channel/Application/Readers",
+			"lscc/GetDeploymentSpec":               "/Channel/Application/Readers",
+			"lscc/GetChaincodeData":                "/Channel/Application/Readers",
+			"lscc/GetInstantiatedChaincodes":       "/Channel/Application/Readers",
+			"qscc/GetChainInfo":                    "/Channel/Application/Readers",
+			"qscc/GetBlockByNumber":                "/Channel/Application/Readers",
+			"qscc/GetBlockByHash":                  "/Channel/Application/Readers",
+			"qscc/GetTransactionByID":              "/Channel/Application/Readers",
+			"qscc/GetBlockByTxID":                  "/Channel/Application/Readers",
+			"cscc/GetConfigBlock":                  "/Channel/Application/Readers",
+			"cscc/GetChannelConfig":                "/Channel/Application/Readers",
+			"peer/Propose":                         "/Channel/Application/Writers",
+			"peer/ChaincodeToChaincode":            "/Channel/Application/Writers",
+			"event/Block":                          "/Channel/Application/Readers",
+			"event/FilteredBlock":                  "/Channel/Application/Readers",
+		},
+		Policies: map[string]ConfigtxPolicy{
+			fconfigtx.ReadersPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "ANY Readers",
+			},
+			fconfigtx.WritersPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "ANY Writers",
+			},
+			fconfigtx.AdminsPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "MAJORITY Admins",
+			},
+		},
+		Capabilities: make(map[string]bool),
+	}
+	if version == FabricVersion_V20 {
+		application.Policies[fconfigtx.EndorsementPolicyKey] = ConfigtxPolicy{
+			Type: fconfigtx.ImplicitMetaPolicyType,
+			Rule: "ANY Endorsement",
+		}
+		application.Policies[fconfigtx.LifecycleEndorsementPolicyKey] = ConfigtxPolicy{
+			Type: fconfigtx.ImplicitMetaPolicyType,
+			Rule: "ANY Endorsement",
+		}
+		application.Capabilities["V2_0"] = true
+	} else {
+		application.Capabilities["V1_4_2"] = true
+	}
+
+	channelApplication := application
+	for _, peerOrg := range entity.Peers {
+		channelApplication.Organizations = append(channelApplication.Organizations, peerOrganizations[peerOrg])
+	}
+	configtx.Profiles[fmt.Sprintf(defaultChannelProfileNameTemplate, entity.ChannelId)] = ConfigtxProfile{
+		Consortium:   fmt.Sprintf(DefaultConsortiumNameTemplate, entity.ChannelId),
+		Capabilities: capabilities,
+		Application:  channelApplication,
+		Policies: map[string]ConfigtxPolicy{
+			fconfigtx.ReadersPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "ANY Readers",
+			},
+			fconfigtx.WritersPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "ANY Writers",
+			},
+			fconfigtx.AdminsPolicyKey: {
+				Type: fconfigtx.ImplicitMetaPolicyType,
+				Rule: "MAJORITY Admins",
+			},
+		},
+	}
+
+	data, err = yaml.Marshal(configtx)
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(path, data, 0755)
+}
+
+// GenerateChannelTxAndAnchorPeer creates a new channel transaction in an existing fabric network
 func GenerateChannelTxAndAnchorPeer(fileDir string, channelId string, nc *network.NetworkConfig) error {
 	channelArtifactsPath := filepath.Join(fileDir, "channel-artifacts")
 	if err := os.MkdirAll(channelArtifactsPath, 0755); err != nil {
@@ -488,7 +627,7 @@ func GenerateChannelTxAndAnchorPeer(fileDir string, channelId string, nc *networ
 	}
 	// generate channel transaction
 	logger.Infof("begin to generate channel.tx, channel=%s", channelId)
-	profileConfig := genesisconfig.Load(defaultChannelProfileName, fileDir)
+	profileConfig := genesisconfig.Load(fmt.Sprintf(defaultChannelProfileNameTemplate, channelId), fileDir)
 	outputChannelCreateTxPath := filepath.Join(channelArtifactsPath, fmt.Sprintf("%s.tx", channelId))
 	if err := doOutputChannelCreateTx(profileConfig, channelId, outputChannelCreateTxPath); err != nil {
 		return err
@@ -506,7 +645,7 @@ func GenerateChannelTxAndAnchorPeer(fileDir string, channelId string, nc *networ
 	// generate anchor peer transaction
 	for org := range peerOrgs {
 		logger.Infof("begin to generate anchors.tx, org=%s", org)
-		profileConfig = genesisconfig.Load(defaultChannelProfileName, fileDir)
+		profileConfig = genesisconfig.Load(fmt.Sprintf(defaultChannelProfileNameTemplate, channelId), fileDir)
 		outputAnchorPeersUpdatePath := filepath.Join(channelArtifactsPath, fmt.Sprintf("%s_%sanchors.tx", channelId, org))
 		if err := doOutputAnchorPeersUpdate(profileConfig, channelId, outputAnchorPeersUpdatePath, org); err != nil {
 			return err
@@ -525,7 +664,7 @@ func doOutputBlock(config *genesisconfig.Profile, channelId string, outputBlock 
 		return errors.Errorf("refusing to generate block which is missing orderer section")
 	}
 	if config.Consortiums == nil {
-		logger.Warn("genesis block does not contain a consortiums group definition.  This block cannot be used for orderer bootstrap")
+		logger.Warn("genesis block does not contain a consortiums group definition. This block cannot be used for orderer bootstrap")
 	}
 	genesisBlock := pgen.GenesisBlockForChannel(channelId)
 	if err := utils.WriteFile(outputBlock, protoutil.MarshalOrPanic(genesisBlock), 0640); err != nil {
@@ -594,7 +733,53 @@ func doOutputAnchorPeersUpdate(conf *genesisconfig.Profile, channelId, outputAnc
 	return nil
 }
 
-func GenerateConfigGroup(org *genesisconfig.Organization) (*cb.ConfigGroup, error) {
+func BuildConsortiumConfigGroup(consortium *genesisconfig.Consortium) (*cb.ConfigGroup, error) {
+	group, err := encoder.NewConsortiumGroup(consortium)
+	if err != nil {
+		return nil, errors.Wrapf(err, "bad consortium definition")
+	}
+	return group, nil
+}
+
+func BuildConsortiumOrgs(dataDir string, nodes []*network.Node, version string) []*genesisconfig.Organization {
+	var peerOrgs []*genesisconfig.Organization
+	for _, n := range nodes {
+		peerOrgsPath := filepath.Join(dataDir, "crypto-config", "peerOrganizations")
+		peerOrganization := &genesisconfig.Organization{
+			Name:   n.OrgId,
+			ID:     n.OrgId,
+			MSPDir: filepath.Join(peerOrgsPath, n.Domain, "msp"),
+			Policies: map[string]*genesisconfig.Policy{
+				fconfigtx.ReadersPolicyKey: {
+					Type: fconfigtx.SignaturePolicyType,
+					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.peer', '%[1]s.client')", n.OrgId),
+				},
+				fconfigtx.WritersPolicyKey: {
+					Type: fconfigtx.SignaturePolicyType,
+					Rule: fmt.Sprintf("OR('%[1]s.admin', '%[1]s.client')", n.OrgId),
+				},
+				fconfigtx.AdminsPolicyKey: {
+					Type: fconfigtx.SignaturePolicyType,
+					Rule: fmt.Sprintf("OR('%s.admin')", n.OrgId),
+				},
+			},
+		}
+		if peerOrganization.MSPType == "" {
+			peerOrganization.MSPType = msp.ProviderTypeToString(msp.FABRIC)
+		}
+		if version == FabricVersion_V20 {
+			peerOrganization.Policies[fconfigtx.EndorsementPolicyKey] = &genesisconfig.Policy{
+				Type: fconfigtx.SignaturePolicyType,
+				Rule: fmt.Sprintf("OR('%s.member')", n.OrgId),
+			}
+		}
+		peerOrgs = append(peerOrgs, peerOrganization)
+	}
+
+	return peerOrgs
+}
+
+func GenerateApplicationConfigGroup(org *genesisconfig.Organization) (*cb.ConfigGroup, error) {
 	og, err := encoder.NewOrdererOrgGroup(org)
 	if err != nil {
 		return nil, errors.Wrapf(err, "bad org definition for org %s", org.Name)

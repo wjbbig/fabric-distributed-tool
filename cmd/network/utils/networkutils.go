@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"github.com/pkg/errors"
+	"github.com/wjbbig/fabric-distributed-tool/tools/configtxgen/genesisconfig"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -34,10 +35,47 @@ func GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, c
 }
 
 func GenerateConfigtx(dataDir, consensus, channelId, fversion string, networkConfig *network.NetworkConfig) error {
+	var err error
+	var entities []*fabricconfig.ConfigtxApplicationChannelEntity
+	// use existing network config file to generate configtx.yaml
+	if channelId == "" {
+		for channelName := range networkConfig.Channels {
+			peerNodes, _, err := networkConfig.GetNodesByChannel(channelName)
+			if err != nil {
+				return err
+			}
+			if peerNodes == nil {
+				return errors.New("at least set one peer node")
+			}
+			if networkConfig.Consensus == "" {
+				consensus = "solo"
+			}
+
+			fversion = networkConfig.Version
+			if networkConfig.Version == "" {
+				fversion = fabricconfig.FabricVersion_V14
+			}
+			var orgs []string
+			for _, node := range peerNodes {
+				orgs = append(orgs, node.OrgId)
+			}
+			entities = append(entities, &fabricconfig.ConfigtxApplicationChannelEntity{ChannelId: channelName, Peers: orgs})
+		}
+
+		if err := fabricconfig.GenerateConfigtxFile(dataDir, consensus, networkConfig.GetPeerNodes(),
+			networkConfig.GetOrdererNodes(), entities, fversion); err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	// use the "network generate" command to generate configtx.yaml
 	peerNodes, ordererNodes, err := networkConfig.GetNodesByChannel(channelId)
 	if err != nil {
 		return err
 	}
+
 	if consensus == "" {
 		if len(ordererNodes) == 1 {
 			consensus = "solo"
@@ -45,7 +83,12 @@ func GenerateConfigtx(dataDir, consensus, channelId, fversion string, networkCon
 			consensus = "etcdraft"
 		}
 	}
-	if err := fabricconfig.GenerateConfigtxFile(dataDir, consensus, ordererNodes, peerNodes, fversion); err != nil {
+	var orgs []string
+	for _, node := range peerNodes {
+		orgs = append(orgs, node.OrgId)
+	}
+	entities = append(entities, &fabricconfig.ConfigtxApplicationChannelEntity{ChannelId: channelId, Peers: orgs})
+	if err := fabricconfig.GenerateConfigtxFile(dataDir, consensus, ordererNodes, peerNodes, entities, fversion); err != nil {
 		return err
 	}
 	return nil
@@ -75,6 +118,9 @@ func GenerateDockerCompose(dataDir string, peerNodes, ordererNodes []*network.No
 		var extraHosts []string
 		extraHosts = append(extraHosts, spliceHostnameAndIP(peer, peerNodes)...)
 		extraHosts = append(extraHosts, spliceHostnameAndIP(peer, ordererNodes)...)
+		if couchdb != peer.Couch {
+			couchdb = peer.Couch
+		}
 		if err := docker_compose.GeneratePeerDockerComposeFile(dataDir, peer, gossipUrl, extraHosts, imageTags, couchdb); err != nil {
 			return err
 		}
@@ -110,36 +156,52 @@ func spliceHostnameAndIP(excludeNode *network.Node, nodes []*network.Node) (extr
 }
 
 func GenerateConnectionProfile(dataDir, channelId string, networkConfig *network.NetworkConfig) error {
-	var pUrls []string
-	var oUrls []string
-	peerNodes, ordererNodes, err := networkConfig.GetNodesByChannel(channelId)
-	if err != nil {
-		return err
+	var entities []connectionprofile.ChannelEntity
+	var channels []string
+	if channelId != "" {
+		channels = append(channels, channelId)
+	} else {
+		for channelName := range networkConfig.Channels {
+			channels = append(channels, channelName)
+		}
 	}
-	for _, node := range peerNodes {
-		pUrls = append(pUrls, fmt.Sprintf("%s:%d:%s", node.GetHostname(), node.NodePort, node.Host))
+	for _, channel := range channels {
+		var entity connectionprofile.ChannelEntity
+		peerNodes, ordererNodes, err := networkConfig.GetNodesByChannel(channel)
+		if err != nil {
+			return err
+		}
+		entity.ChannelId = channel
+		for _, node := range peerNodes {
+			entity.Peers = append(entity.Peers, fmt.Sprintf("%s:%d:%s", node.GetHostname(), node.NodePort, node.Host))
+		}
+		for _, node := range ordererNodes {
+			entity.Orderers = append(entity.Orderers, fmt.Sprintf("%s:%d:%s", node.GetHostname(), node.NodePort, node.Host))
+		}
+		entities = append(entities, entity)
 	}
-	for _, node := range ordererNodes {
-		oUrls = append(oUrls, fmt.Sprintf("%s:%d:%s", node.GetHostname(), node.NodePort, node.Host))
-	}
-	return connectionprofile.GenerateNetworkConnProfile(dataDir, channelId, pUrls, oUrls)
+
+	return connectionprofile.GenerateNetworkConnProfile(dataDir, entities)
 }
 
-func ReadSSHConfigFromNetwork(networkConfig *network.NetworkConfig) (*sshutil.SSHUtil, error) {
+func ReadSSHConfigFromNetwork(dataDir string, networkConfig *network.NetworkConfig) (*sshutil.SSHUtil, error) {
 	sshUtil := sshutil.NewSSHUtil()
 	for _, node := range networkConfig.GetPeerNodes() {
-		if err := sshUtil.Add(node.GetHostname(), node.Username, node.Password, fmt.Sprintf("%s:%d", node.Host, node.SSHPort), node.Type, node.Couch); err != nil {
+		if err := sshUtil.Add(node.GetHostname(), node.Username, node.Password, fmt.Sprintf("%s:%d", node.Host, node.SSHPort),
+			node.Type, dataDir, node.Dest, node.Couch); err != nil {
 			return nil, err
 		}
 	}
 	for _, node := range networkConfig.GetOrdererNodes() {
-		if err := sshUtil.Add(node.GetHostname(), node.Username, node.Password, fmt.Sprintf("%s:%d", node.Host, node.SSHPort), node.Type, false); err != nil {
+		if err := sshUtil.Add(node.GetHostname(), node.Username, node.Password, fmt.Sprintf("%s:%d", node.Host, node.SSHPort),
+			node.Type, dataDir, node.Dest, false); err != nil {
 			return nil, err
 		}
 	}
 
 	for _, node := range networkConfig.GetCANodes() {
-		if err := sshUtil.Add(node.GetHostname(), node.Username, node.Password, fmt.Sprintf("%s:%d", node.Host, node.SSHPort), node.Type, false); err != nil {
+		if err := sshUtil.Add(node.GetHostname(), node.Username, node.Password, fmt.Sprintf("%s:%d", node.Host, node.SSHPort),
+			node.Type, dataDir, node.Dest, false); err != nil {
 			return nil, err
 		}
 	}
@@ -159,43 +221,54 @@ func TransferFilesByNodeName(sshUtil *sshutil.SSHUtil, dataDir string, nodes []s
 	return nil
 }
 
-func TransferFilesAllNodes(sshUtil *sshutil.SSHUtil, dataDir string) error {
+func TransferFilesAllNodes(sshUtil *sshutil.SSHUtil, dataDir string, nc *network.NetworkConfig) error {
 	for name, client := range sshUtil.Clients() {
+		// the file of node has been transferred when building the other channel
+		if nc.Nodes[name].Transferred {
+			continue
+		}
 		if err := transferFiles(client, name, dataDir); err != nil {
 			return err
 		}
+		nc.Nodes[name].Transferred = true
 	}
 	return nil
 }
 
 func transferFiles(sshClient *sshutil.SSHClient, nodeName, dataDir string) error {
-	ordererCryptoConfigPrefix := filepath.Join(dataDir, "crypto-config", "ordererOrganizations")
-	peerCryptoConfigPrefix := filepath.Join(dataDir, "crypto-config", "peerOrganizations")
 	_, orgName, _ := utils.SplitNameOrgDomain(nodeName)
 	// send node self keypairs and certs
 	var certDir string
+	var certDestDir string
 	if sshClient.NodeType == network.PeerNode {
+		peerCryptoConfigPrefix := filepath.Join(dataDir, "crypto-config", "peerOrganizations")
+		peerCryptoConfigDestPrefix := filepath.Join(sshClient.DestPath, "crypto-config", "peerOrganizations")
 		certDir = filepath.Join(peerCryptoConfigPrefix, orgName)
+		certDestDir = filepath.Join(peerCryptoConfigDestPrefix, orgName)
 	} else {
+		ordererCryptoConfigPrefix := filepath.Join(dataDir, "crypto-config", "ordererOrganizations")
+		ordererCryptoConfigDestPrefix := filepath.Join(sshClient.DestPath, "crypto-config", "ordererOrganizations")
 		certDir = filepath.Join(ordererCryptoConfigPrefix, orgName)
+		certDestDir = filepath.Join(ordererCryptoConfigDestPrefix, orgName)
 	}
-	err := sshClient.Sftp(certDir, certDir)
+	err := sshClient.Sftp(certDir, certDestDir)
 	if err != nil {
 		return err
 	}
 	// send genesis.block, channel.tx and anchor.tx
-	channelArtifactsPath := filepath.Join(dataDir, "channel-artifacts")
-	if err = sshClient.Sftp(channelArtifactsPath, channelArtifactsPath); err != nil {
+	channelArtifactsSourcePath := filepath.Join(dataDir, "channel-artifacts")
+	channelArtifactsDestPath := filepath.Join(sshClient.DestPath, "channel-artifacts")
+	if err = sshClient.Sftp(channelArtifactsSourcePath, channelArtifactsDestPath); err != nil {
 		return err
 	}
 
 	dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(nodeName, ".", "-")))
-	if err = sshClient.Sftp(dockerComposeFilePath, dataDir); err != nil {
+	if err = sshClient.Sftp(dockerComposeFilePath, sshClient.DestPath); err != nil {
 		return err
 	}
 	if sshClient.NeedCouch {
 		dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-couchdb.yaml", strings.ReplaceAll(nodeName, ".", "-")))
-		if err = sshClient.Sftp(dockerComposeFilePath, dataDir); err != nil {
+		if err = sshClient.Sftp(dockerComposeFilePath, sshClient.DestPath); err != nil {
 			return err
 		}
 	}
@@ -203,46 +276,52 @@ func transferFiles(sshClient *sshutil.SSHClient, nodeName, dataDir string) error
 }
 
 func TransferNewChannelFiles(dataDir string, channelId string, sshUtil *sshutil.SSHUtil, nc *network.NetworkConfig) error {
-	channelTxPath := filepath.Join(dataDir, "channel-artifacts", fmt.Sprintf("%s.tx", channelId))
+	channelTxSourcePath := filepath.Join(dataDir, "channel-artifacts", fmt.Sprintf("%s.tx", channelId))
 	peerNodes, ordererNodes, err := nc.GetNodesByChannel(channelId)
 	if err != nil {
 		return err
 	}
 	sshClients := sshUtil.Clients()
 	for _, node := range peerNodes {
-		if err := sshClients[node.GetHostname()].Sftp(channelTxPath, channelTxPath); err != nil {
+		client := sshClients[node.GetHostname()]
+		channelTxDestPath := filepath.Join(client.DestPath, "channel-artifacts", fmt.Sprintf("%s.tx", channelId))
+		if err := client.Sftp(channelTxSourcePath, channelTxDestPath); err != nil {
 			return err
 		}
 	}
 	for _, node := range ordererNodes {
-		if err := sshClients[node.GetHostname()].Sftp(channelTxPath, channelTxPath); err != nil {
+		client := sshClients[node.GetHostname()]
+		channelTxDestPath := filepath.Join(client.DestPath, "channel-artifacts", fmt.Sprintf("%s.tx", channelId))
+		if err := client.Sftp(channelTxSourcePath, channelTxDestPath); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func StartupNetwork(sshUtil *sshutil.SSHUtil, dataDir string) error {
-	logger.Info("begin to start network")
+func StartupNetwork(sshUtil *sshutil.SSHUtil, nc *network.NetworkConfig) error {
 	for name, client := range sshUtil.Clients() {
-		if err := startupNode(dataDir, name, client); err != nil {
+		if nc.Nodes[name].Start {
+			continue
+		}
+		if err := startupNode(name, client); err != nil {
 			return err
 		}
+		nc.Nodes[name].Start = true
 	}
-	logger.Info("starting network complete!")
 	return nil
 }
 
-func startupNode(dataDir, name string, client *sshutil.SSHClient) error {
+func startupNode(name string, client *sshutil.SSHClient) error {
 	var dockerComposeFilePath string
 	if client.NeedCouch && client.NodeType == network.PeerNode {
 		// start couchdb first
-		dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-couchdb.yaml", strings.ReplaceAll(name, ".", "-")))
+		dockerComposeFilePath = filepath.Join(client.DestPath, fmt.Sprintf("docker-compose-%s-couchdb.yaml", strings.ReplaceAll(name, ".", "-")))
 		if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s up -d", dockerComposeFilePath)); err != nil {
 			logger.Info(err.Error())
 		}
 	}
-	dockerComposeFilePath = filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
+	dockerComposeFilePath = filepath.Join(client.DestPath, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
 	// start node
 	if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s up -d", dockerComposeFilePath)); err != nil {
 		logger.Info(err.Error())
@@ -250,23 +329,23 @@ func startupNode(dataDir, name string, client *sshutil.SSHClient) error {
 	return nil
 }
 
-func ShutdownNetwork(sshUtil *sshutil.SSHUtil, dataDir string) error {
+func ShutdownNetwork(sshUtil *sshutil.SSHUtil) error {
 	for name, client := range sshUtil.Clients() {
-		if err := stopNodeByNodeName(dataDir, client, name); err != nil {
+		if err := stopNodeByNodeName(client, name); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func stopNodeByNodeName(dataDir string, client *sshutil.SSHClient, name string) error {
+func stopNodeByNodeName(client *sshutil.SSHClient, name string) error {
 	if client == nil {
 		return errors.Errorf("node %s does not exist", name)
 	}
 	if strings.HasPrefix(name, "ca_") {
 		name = strings.ReplaceAll(name, "_", "-")
 	}
-	dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
+	dockerComposeFilePath := filepath.Join(client.DestPath, fmt.Sprintf("docker-compose-%s.yaml", strings.ReplaceAll(name, ".", "-")))
 	// shutdown nodes
 	if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s down -v", dockerComposeFilePath)); err != nil {
 		logger.Info(err.Error())
@@ -274,7 +353,7 @@ func stopNodeByNodeName(dataDir string, client *sshutil.SSHClient, name string) 
 
 	// delete couchdb container
 	if client.NeedCouch {
-		dockerComposeFilePath := filepath.Join(dataDir, fmt.Sprintf("docker-compose-%s-couchdb.yaml", strings.ReplaceAll(name, ".", "-")))
+		dockerComposeFilePath := filepath.Join(client.DestPath, fmt.Sprintf("docker-compose-%s-couchdb.yaml", strings.ReplaceAll(name, ".", "-")))
 		if err := client.RunCmd(fmt.Sprintf("docker-compose -f %s down -v", dockerComposeFilePath)); err != nil {
 			logger.Info(err.Error())
 		}
@@ -500,17 +579,29 @@ func upgradeCCByVersion(nc *network.NetworkConfig, dataDir, channelId, ccId, ccP
 // ==========================cmd=========================
 
 func DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam,
-	ccPolicy string, ccInitRequired bool, sequence int64, ifCouchdb bool, peerUrls, ordererUrls []string, fVersion string) error {
+	ccPolicy string, ccInitRequired bool, sequence int64, ifCouchdb bool, peerUrls, ordererUrls []string, fVersion string, useFile bool) error {
+	var err error
+	networkConfig := &network.NetworkConfig{}
+	if !useFile {
+		networkConfig, err = GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy, ccInitRequired, sequence, ifCouchdb, peerUrls, ordererUrls, fVersion)
+		if err != nil {
+			return err
+		}
+	} else {
+		networkConfig, err = network.UnmarshalNetworkConfig(dataDir)
+		if err != nil {
+			return err
+		}
+	}
+	if networkName == "" {
+		networkName = networkConfig.Name
+	}
 	config, err := network.Load()
-	// config does not exist
+	// if config does not exist
 	if err != nil {
 		config = network.NewHomeDirConfig()
 	}
 	if err := config.AddNetwork(networkName, dataDir); err != nil {
-		return err
-	}
-	networkConfig, err := GenerateNetwork(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy, ccInitRequired, sequence, ifCouchdb, peerUrls, ordererUrls, fVersion)
-	if err != nil {
 		return err
 	}
 	if err := GenerateCryptoConfig(dataDir, networkConfig); err != nil {
@@ -540,45 +631,6 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 	if err != nil {
 		return err
 	}
-	// startup command only starts a fabric network with one channel and one chaincode right now
-	// TODO: support multi channels
-	var channelId, ccId, ccPath, ccInitParam, ccVersion, ccPolicy, ccInitFunc, consensus string
-	var ifInstallCC, ccInitRequired bool
-	for name, channel := range nc.Channels {
-		channelId = name
-		if len(channel.Chaincodes) > 0 {
-			ifInstallCC = true
-		} else {
-			break
-		}
-		ccPath = nc.Chaincodes[channel.Chaincodes[0].Name].Path
-		ccInitParam = nc.Chaincodes[channel.Chaincodes[0].Name].InitParam
-		ccInitFunc = nc.Chaincodes[channel.Chaincodes[0].Name].InitFunc
-		ccInitRequired = nc.Chaincodes[channel.Chaincodes[0].Name].InitRequired
-		ccVersion = nc.Chaincodes[channel.Chaincodes[0].Name].Version
-		ccPolicy = nc.Chaincodes[channel.Chaincodes[0].Name].Policy
-		ccId = channel.Chaincodes[0].Name
-		consensus = channel.Consensus
-	}
-	if err := fabricconfig.GenerateGenesisBlockAndChannelTxAndAnchorPeer(dataDir, channelId, nc); err != nil {
-		return err
-	}
-	sshUtil, err := ReadSSHConfigFromNetwork(nc)
-	if err != nil {
-		return err
-	}
-	defer sshUtil.CloseAll()
-
-	if err := TransferFilesAllNodes(sshUtil, dataDir); err != nil {
-		return err
-	}
-	if err := StartupNetwork(sshUtil, dataDir); err != nil {
-		return err
-	}
-	// if only starting the fabric docker container
-	if startOnly {
-		return nil
-	}
 
 	sdk, err := sdkutil.NewFabricSDKDriver(filepath.Join(dataDir, connectionprofile.DefaultConnProfileName))
 	if err != nil {
@@ -586,35 +638,68 @@ func DoStartupCommand(dataDir string, startOnly bool) error {
 	}
 	defer sdk.Close()
 
-	if consensus == fabricconfig.OrdererType_ETCDRAFT {
+	sshUtil, err := ReadSSHConfigFromNetwork(dataDir, nc)
+	if err != nil {
+		return err
+	}
+	defer sshUtil.CloseAll()
+
+	logger.Info("begin to start network")
+	for channelId := range nc.Channels {
+		if err := fabricconfig.GenerateGenesisBlockAndChannelTxAndAnchorPeer(dataDir, channelId, nc); err != nil {
+			return err
+		}
+	}
+
+	if err := TransferFilesAllNodes(sshUtil, dataDir, nc); err != nil {
+		return err
+	}
+
+	if err := StartupNetwork(sshUtil, nc); err != nil {
+		return err
+	}
+
+	logger.Info("starting network complete!")
+	// if only starting the fabric docker container
+	if startOnly {
+		return nil
+	}
+
+	if nc.Consensus == fabricconfig.OrdererType_ETCDRAFT {
 		logger.Info("sleeping 15s to allow etcdraft cluster to complete booting")
 		time.Sleep(time.Second * 15)
 	} else {
 		time.Sleep(time.Second * 5)
 	}
 
-	// create channel
-	if err := CreateChannel(nc, dataDir, channelId, sdk); err != nil {
-		return err
-	}
-	// join channel
-	if err := JoinChannel(nc, channelId, sdk); err != nil {
-		return err
-	}
-	if ifInstallCC {
-		if nc.Version == fabricconfig.FabricVersion_V20 {
-			if err := deployCCV2(nc, dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, ccInitRequired, ccInitFunc, ccInitParam, true, sdk, false); err != nil {
-				return err
-			}
-		} else {
-			// install chaincode
-			if err := InstallCC(nc, ccId, ccPath, ccVersion, channelId, sdk); err != nil {
-				return err
-			}
-			// InstantiateCC
-			if err := InstantiateCC(nc, ccId, ccPath, ccVersion, channelId,
-				ccPolicy, ccInitParam, sdk); err != nil {
-				return err
+	for channelId, channel := range nc.Channels {
+		// create channel
+		if err := CreateChannel(nc, dataDir, channelId, sdk); err != nil {
+			return err
+		}
+		// join channel
+		if err := JoinChannel(nc, channelId, sdk); err != nil {
+			return err
+		}
+		if len(channel.Chaincodes) > 0 {
+			for _, chaincode := range channel.Chaincodes {
+				cc := nc.Chaincodes[chaincode.Name]
+				if nc.Version == fabricconfig.FabricVersion_V20 {
+					if err := deployCCV2(nc, dataDir, channelId, chaincode.Name, cc.Path, cc.Version, cc.Policy,
+						cc.InitRequired, cc.InitFunc, cc.InitParam, true, sdk, false); err != nil {
+						return err
+					}
+				} else {
+					// install chaincode
+					if err := InstallCC(nc, chaincode.Name, cc.Path, cc.Version, channelId, sdk); err != nil {
+						return err
+					}
+					// InstantiateCC
+					if err := InstantiateCC(nc, chaincode.Name, cc.Path, cc.Version, channelId,
+						cc.Policy, cc.InitParam, sdk); err != nil {
+						return err
+					}
+				}
 			}
 		}
 	}
@@ -655,23 +740,24 @@ func DoShutdownCommand(dataDir string) error {
 	if err != nil {
 		return err
 	}
-	sshUtil, err := ReadSSHConfigFromNetwork(nc)
+	sshUtil, err := ReadSSHConfigFromNetwork(dataDir, nc)
 	if err != nil {
 		return err
 	}
 	defer sshUtil.CloseAll()
-	if err := ShutdownNetwork(sshUtil, dataDir); err != nil {
+	if err := ShutdownNetwork(sshUtil); err != nil {
 		return err
 	}
 	return nil
 }
 
-func DoCreateChannelCommand(dataDir, channelId, consensus string, peers, orderers []string) error {
+func DoCreateChannelCommand(dataDir, channelId string, peers []string) error {
 	nc, err := network.UnmarshalNetworkConfig(dataDir)
 	if err != nil {
 		return err
 	}
-	if err := nc.ExtendChannel(dataDir, channelId, consensus, peers, orderers); err != nil {
+	// update network config
+	if err := nc.ExtendChannel(dataDir, channelId, peers); err != nil {
 		return err
 	}
 	profile, err := connectionprofile.UnmarshalConnectionProfile(dataDir)
@@ -681,15 +767,21 @@ func DoCreateChannelCommand(dataDir, channelId, consensus string, peers, orderer
 	if err := profile.ExtendChannel(dataDir, channelId, peers); err != nil {
 		return err
 	}
-	if err := fabricconfig.GenerateChannelTxAndAnchorPeer(dataDir, channelId, nc); err != nil {
-		return err
+
+	// update consortium of the system channel
+	var nodes []*network.Node
+	var peerOrgs []string
+	for _, peer := range peers {
+		node, ok := nc.Nodes[peer]
+		if !ok {
+			return errors.Errorf("node %s does not exist", peer)
+		}
+		nodes = append(nodes, node)
+		peerOrgs = append(peerOrgs, node.OrgId)
 	}
-	sshUtil, err := ReadSSHConfigFromNetwork(nc)
+	orgs := fabricconfig.BuildConsortiumOrgs(dataDir, nodes, nc.Version)
+	group, err := fabricconfig.BuildConsortiumConfigGroup(&genesisconfig.Consortium{Organizations: orgs})
 	if err != nil {
-		return err
-	}
-	defer sshUtil.CloseAll()
-	if err := TransferNewChannelFiles(dataDir, channelId, sshUtil, nc); err != nil {
 		return err
 	}
 	sdk, err := sdkutil.NewFabricSDKDriver(filepath.Join(dataDir, connectionprofile.DefaultConnProfileName))
@@ -698,12 +790,39 @@ func DoCreateChannelCommand(dataDir, channelId, consensus string, peers, orderer
 	}
 	defer sdk.Close()
 
+	ordererNodes := nc.GetOrdererNodes()
+	if err := sdk.ExtendConsortium(fabricconfig.DefaultGenesisChannel,
+		fmt.Sprintf(fabricconfig.DefaultConsortiumNameTemplate, channelId),
+		ordererNodes[0].OrgId, ordererNodes[0].GetHostname(), group); err != nil {
+		return err
+	}
+
+	// generate channel tx
+	if err = fabricconfig.ExtendChannelProfile(dataDir, nc.Version, nc.GetPeerNodes(),
+		&fabricconfig.ConfigtxApplicationChannelEntity{
+			ChannelId: channelId,
+			Peers:     utils.DeduplicatedSlice(peerOrgs),
+		}); err != nil {
+		return err
+	}
+	if err = fabricconfig.GenerateChannelTxAndAnchorPeer(dataDir, channelId, nc); err != nil {
+		return err
+	}
+	sshUtil, err := ReadSSHConfigFromNetwork(dataDir, nc)
+	if err != nil {
+		return err
+	}
+	defer sshUtil.CloseAll()
+	if err = TransferNewChannelFiles(dataDir, channelId, sshUtil, nc); err != nil {
+		return err
+	}
+
 	// create channel
-	if err := CreateChannel(nc, dataDir, channelId, sdk); err != nil {
+	if err = CreateChannel(nc, dataDir, channelId, sdk); err != nil {
 		return err
 	}
 	// join channel
-	if err := JoinChannel(nc, channelId, sdk); err != nil {
+	if err = JoinChannel(nc, channelId, sdk); err != nil {
 		return err
 	}
 	return nil
@@ -748,7 +867,7 @@ func DoStartNodeCmd(dataDir string, nodeNames ...string) error {
 	if err != nil {
 		return err
 	}
-	sshUtil, err := ReadSSHConfigFromNetwork(nc)
+	sshUtil, err := ReadSSHConfigFromNetwork(dataDir, nc)
 	if err != nil {
 		return err
 	}
@@ -761,7 +880,7 @@ func DoStartNodeCmd(dataDir string, nodeNames ...string) error {
 	for _, name := range nodeNames {
 		// we don't need to check nil for the client, since TransferFilesByNodeName has done it
 		client := sshUtil.GetClientByName(name)
-		if err := startupNode(dataDir, name, client); err != nil {
+		if err := startupNode(name, client); err != nil {
 			return err
 		}
 	}
@@ -773,14 +892,14 @@ func DoStopNodeCmd(dataDir string, nodeNames ...string) error {
 	if err != nil {
 		return err
 	}
-	sshUtil, err := ReadSSHConfigFromNetwork(nc)
+	sshUtil, err := ReadSSHConfigFromNetwork(dataDir, nc)
 	if err != nil {
 		return err
 	}
 	defer sshUtil.CloseAll()
 	for _, name := range nodeNames {
 		client := sshUtil.GetClientByName(name)
-		if err := stopNodeByNodeName(dataDir, client, name); err != nil {
+		if err := stopNodeByNodeName(client, name); err != nil {
 			return err
 		}
 	}
@@ -820,7 +939,7 @@ func DoNewOrgPeerJoinChannel(dataDir string, channelId, nodeName string) error {
 		existOrgs = append(existOrgs, peerNode.OrgId)
 	}
 	orgProfile := fabricconfig.GenerateOrgProfile(dataDir, node, nc.Version)
-	configGroup, err := fabricconfig.GenerateConfigGroup(orgProfile)
+	configGroup, err := fabricconfig.GenerateApplicationConfigGroup(orgProfile)
 	if err != nil {
 		return err
 	}
@@ -833,7 +952,7 @@ func DoNewOrgPeerJoinChannel(dataDir string, channelId, nodeName string) error {
 	if err = sdk.ExtendOrShrinkChannel("extend", channelId, node.OrgId, ordererEndpoint, existOrgs, configGroup); err != nil {
 		return err
 	}
-	// sleep 5s,
+	// sleep 5s
 	time.Sleep(5 * time.Second)
 	if err := joinChannelWithNodeName(nc, channelId, nodeName, sdk); err != nil {
 		return err
@@ -870,7 +989,7 @@ func DoCreateCANodeForOrg(dataDir, orgId, enrollId, enrollSecret string) error {
 		return err
 	}
 	// sftp docker-compose file
-	sshUtil, err := ReadSSHConfigFromNetwork(config)
+	sshUtil, err := ReadSSHConfigFromNetwork(dataDir, config)
 	if err != nil {
 		return err
 	}
@@ -996,4 +1115,19 @@ func GetNetworkPathByName(dataDir, name string) (string, error) {
 		return "", errors.New("network does not exist")
 	}
 	return path, nil
+}
+
+func NetworkExist(name string) bool {
+	if name == "" {
+		return true
+	}
+	networkPathConf, err := network.Load()
+	if err != nil {
+		return true
+	}
+	path := networkPathConf.GetNetworkPath(name)
+	if path == "" {
+		return false
+	}
+	return false
 }

@@ -39,3 +39,9 @@ func TestGetOutBoundIP(t *testing.T) {
 	require.NoError(t, err)
 	t.Log(ip)
 }
+
+func TestSliceContains(t *testing.T) {
+	v := "aa"
+	s := []string{"bb", "wr", "aa"}
+	require.Equal(t, true, SliceContains(v, s))
+}

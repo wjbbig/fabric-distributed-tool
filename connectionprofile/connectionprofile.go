@@ -204,13 +204,19 @@ type EntityMatcher struct {
 	MappedHost                          string `yaml:"mappedHost,omitempty"`
 }
 
+type ChannelEntity struct {
+	ChannelId string
+	Peers     []string
+	Orderers  []string
+}
+
 // GenerateNetworkConnProfile generates the connection profile, the format peer or orderer must be 'url:port:ip'
-func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ordererUrls []string) error {
+func GenerateNetworkConnProfile(filePath string, channelEntities []ChannelEntity) error {
 	logger.Info("begin to generate fabric-sdk-go connection profile")
 	var connProfile ConnProfile
 	connProfile.Version = "1.0.0"
 	client := &Client{
-		Logger:       &Logger{"info"},
+		Logger:       &Logger{"error"},
 		CryptoConfig: &CryptoConfig{filepath.Join(filePath, defaultCryptoConfigDirName)},
 		CredentialStore: &CredentialStore{
 			Path:        filepath.Join(filePath, "state-store"),
@@ -229,102 +235,110 @@ func GenerateNetworkConnProfile(filePath string, channelId string, peerUrls, ord
 	}
 	connProfile.Client = client
 
-	channel := &Channel{Peers: map[string]*ChannelPeer{}}
 	peers := make(map[string]*Peer)
 	organizations := make(map[string]*Organization)
 	entityMatchers := make(map[string][]*EntityMatcher)
+	connProfile.Channels = map[string]*Channel{}
 	var peerOrgName string
-	for _, url := range peerUrls {
-		args := strings.Split(url, ":")
-		if len(args) != 3 {
-			return errors.Errorf("the peer url should be url:port:ip, but got %s", url)
-		}
-		_, orgName, domain := utils.SplitNameOrgDomain(args[0])
-		peerOrgName = orgName
-		// peer
-		peers[args[0]] = &Peer{
-			URL: fmt.Sprintf("%s:%s", args[0], args[1]),
-			GRPCOptions: &GRPCOptions{
-				SSLTargetNameOverride: args[0],
-				KeepAliveTime:         "0s",
-				KeepAliveTimeout:      "20s",
-				KeepAlivePermit:       false,
-				FailFast:              false,
-				AllowInsecure:         false,
-			},
-			TLSCACerts: &TLSCACert{Path: filepath.Join(filePath, defaultCryptoConfigDirName, "peerOrganizations", domain,
-				"tlsca", fmt.Sprintf("tlsca.%s-cert.pem", domain))},
-		}
-		// channel
-		channel.Peers[args[0]] = &ChannelPeer{
-			EndorsingPeer:  true,
-			ChaincodeQuery: true,
-			LedgerQuery:    true,
-			EventSource:    true,
-		}
-		// organization
-		org, exist := organizations[orgName]
-		if exist {
-			org.Peers = append(org.Peers, args[0])
-		} else {
-			organizations[orgName] = &Organization{
-				MSPId:      orgName,
-				CryptoPath: fmt.Sprintf("peerOrganizations/%[1]s/users/{username}@%[1]s/msp", domain),
-				Peers:      []string{args[0]},
+	for _, entity := range channelEntities {
+		channel := &Channel{Peers: map[string]*ChannelPeer{}}
+		for _, url := range entity.Peers {
+			args := strings.Split(url, ":")
+			if len(args) != 3 {
+				return errors.Errorf("the peer url should be url:port:ip, but got %s", url)
+			}
+			_, orgName, domain := utils.SplitNameOrgDomain(args[0])
+			peerOrgName = orgName
+			// channel
+			channel.Peers[args[0]] = &ChannelPeer{
+				EndorsingPeer:  true,
+				ChaincodeQuery: true,
+				LedgerQuery:    true,
+				EventSource:    true,
+			}
+			// peer
+			if _, ok := peers[args[0]]; !ok {
+				peers[args[0]] = &Peer{
+					URL: fmt.Sprintf("%s:%s", args[0], args[1]),
+					GRPCOptions: &GRPCOptions{
+						SSLTargetNameOverride: args[0],
+						KeepAliveTime:         "0s",
+						KeepAliveTimeout:      "20s",
+						KeepAlivePermit:       false,
+						FailFast:              false,
+						AllowInsecure:         false,
+					},
+					TLSCACerts: &TLSCACert{Path: filepath.Join(filePath, defaultCryptoConfigDirName, "peerOrganizations", domain,
+						"tlsca", fmt.Sprintf("tlsca.%s-cert.pem", domain))},
+				}
+
+				// organization
+				org, exist := organizations[orgName]
+				if exist {
+					org.Peers = append(org.Peers, args[0])
+				} else {
+					organizations[orgName] = &Organization{
+						MSPId:      orgName,
+						CryptoPath: fmt.Sprintf("peerOrganizations/%[1]s/users/{username}@%[1]s/msp", domain),
+						Peers:      []string{args[0]},
+					}
+				}
+
+				// entity matcher
+				em := &EntityMatcher{
+					Pattern:                             args[0],
+					UrlSubstitutionExp:                  fmt.Sprintf("%s:%s", args[2], args[1]),
+					SSLTargetOverrideUrlSubstitutionExp: args[0],
+					MappedHost:                          args[0],
+				}
+				entityMatchers["peer"] = append(entityMatchers["peer"], em)
 			}
 		}
-
-		// entity matcher
-		em := &EntityMatcher{
-			Pattern:                             args[0],
-			UrlSubstitutionExp:                  fmt.Sprintf("%s:%s", args[2], args[1]),
-			SSLTargetOverrideUrlSubstitutionExp: args[0],
-			MappedHost:                          args[0],
-		}
-		entityMatchers["peer"] = append(entityMatchers["peer"], em)
+		connProfile.Channels[entity.ChannelId] = channel
 	}
 	client.Organization = peerOrgName
 	connProfile.Peers = peers
-	connProfile.Channels = map[string]*Channel{
-		channelId: channel,
-	}
 
 	orderers := make(map[string]*Orderer)
-	for _, url := range ordererUrls {
-		args := strings.Split(url, ":")
-		if len(args) != 3 {
-			return errors.Errorf("the orderer url should be url:port:ip, but got %s", url)
-		}
-		_, orgName, domain := utils.SplitNameOrgDomain(args[0])
-		orderers[args[0]] = &Orderer{
-			URL: fmt.Sprintf("%s:%s", args[0], args[1]),
-			GRPCOptions: &GRPCOptions{
-				SSLTargetNameOverride: args[0],
-				KeepAliveTime:         "0s",
-				KeepAliveTimeout:      "20s",
-				KeepAlivePermit:       false,
-				FailFast:              false,
-				AllowInsecure:         false,
-			},
-			TLSCACerts: &TLSCACert{Path: filepath.Join(filePath, defaultCryptoConfigDirName, "ordererOrganizations", domain,
-				"tlsca", fmt.Sprintf("tlsca.%s-cert.pem", domain))},
-		}
+	for _, entity := range channelEntities {
+		for _, url := range entity.Orderers {
+			args := strings.Split(url, ":")
+			if len(args) != 3 {
+				return errors.Errorf("the orderer url should be url:port:ip, but got %s", url)
+			}
+			_, orgName, domain := utils.SplitNameOrgDomain(args[0])
+			if _, ok := orderers[args[0]]; !ok {
+				orderers[args[0]] = &Orderer{
+					URL: fmt.Sprintf("%s:%s", args[0], args[1]),
+					GRPCOptions: &GRPCOptions{
+						SSLTargetNameOverride: args[0],
+						KeepAliveTime:         "0s",
+						KeepAliveTimeout:      "20s",
+						KeepAlivePermit:       false,
+						FailFast:              false,
+						AllowInsecure:         false,
+					},
+					TLSCACerts: &TLSCACert{Path: filepath.Join(filePath, defaultCryptoConfigDirName, "ordererOrganizations", domain,
+						"tlsca", fmt.Sprintf("tlsca.%s-cert.pem", domain))},
+				}
 
-		_, exist := organizations[orgName]
-		if !exist {
-			organizations[orgName] = &Organization{
-				MSPId:      orgName,
-				CryptoPath: fmt.Sprintf("ordererOrganizations/%[1]s/users/{username}@%[1]s/msp", domain),
+				_, exist := organizations[orgName]
+				if !exist {
+					organizations[orgName] = &Organization{
+						MSPId:      orgName,
+						CryptoPath: fmt.Sprintf("ordererOrganizations/%[1]s/users/{username}@%[1]s/msp", domain),
+					}
+				}
+
+				em := &EntityMatcher{
+					Pattern:                             args[0],
+					UrlSubstitutionExp:                  fmt.Sprintf("%s:%s", args[2], args[1]),
+					SSLTargetOverrideUrlSubstitutionExp: args[0],
+					MappedHost:                          args[0],
+				}
+				entityMatchers["orderer"] = append(entityMatchers["orderer"], em)
 			}
 		}
-
-		em := &EntityMatcher{
-			Pattern:                             args[0],
-			UrlSubstitutionExp:                  fmt.Sprintf("%s:%s", args[2], args[1]),
-			SSLTargetOverrideUrlSubstitutionExp: args[0],
-			MappedHost:                          args[0],
-		}
-		entityMatchers["orderer"] = append(entityMatchers["orderer"], em)
 	}
 	connProfile.Orderers = orderers
 	connProfile.Organizations = organizations

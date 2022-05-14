@@ -65,6 +65,7 @@ func resetFlags() {
 	flags.Int64VarP(&ccSequence, "seq", "s", 1, "Chaincode sequence for fabric v2.0")
 	flags.BoolVar(&bootstrap, "bootstrap", false, "Initialize the network configuration file")
 	flags.BoolVar(&extend, "extend", false, "Extend the network configuration file")
+	flags.BoolVar(&file, "file", false, "Using exist networkconfig.yaml to generate network")
 }
 
 var (
@@ -74,18 +75,21 @@ var (
 		Long:  "generate crypto-config.yaml, configtx.yaml and docker-compose.yaml.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var err error
+			//if utils.NetworkExist(networkName) {
+			//	logger.Errorf("network %s exists", networkName)
+			//	return nil
+			//}
 			dataDir, err = utils.GetNetworkPathByName(dataDir, "")
 			if err != nil {
-				return err
+				logger.Error(err.Error())
+				return nil
 			}
 			if _, err = os.Stat(dataDir); err != nil {
 				_ = os.MkdirAll(dataDir, 0755)
 			} else {
 				data, err := ioutil.ReadFile(filepath.Join(dataDir, network.DefaultNetworkConfigName))
 				if err == nil && data != nil && len(data) != 0 {
-					if file {
-
-					} else {
+					if !file {
 						var flag string
 						fmt.Printf("an existing network configuration file was found in the %s，overwrite all? [y/n]\t", dataDir)
 						fmt.Scanf("%s", &flag)
@@ -100,7 +104,9 @@ var (
 
 			switch {
 			case bootstrap:
-				if err := utils.DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy, ccInitRequired, ccSequence, ifCouchdb, peerUrls, ordererUrls, fabricVersion); err != nil {
+				if err := utils.DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion,
+					ccInitFunc, ccInitParam, ccPolicy, ccInitRequired, ccSequence, ifCouchdb, peerUrls,
+					ordererUrls, fabricVersion, file); err != nil {
 					logger.Error(err.Error())
 				}
 			case extend:
