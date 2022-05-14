@@ -17,22 +17,32 @@ fdt network generate --bootstrap -d ./fdtdata -p peer.testpeerorg1:7051@@127.0.0
 ~~~
 Or you can build the networkconfig.yaml by yourself, for example:
 ~~~yaml
+# support 'solo' and 'etcdraft'
+consensus: solo
+# the moniker of this fabric network
 name: testnetwork
+# fabric version
+# v1.4: fabric v1.4.2 or later
+# v2.0: fabric v2.0.0 or later
 version: v2.0
-node_image_tag: 2.3.3
+node_image_tag: 2.4.3 # image version of fabric peer and orderer
 ca_image_tag: 1.4.9
 couch_image_tag: 0.4.22
 channels:
-  mychannel:
-    consensus: solo
+  firstchannel:
     peers:
-    - peer.testpeerorg1
-    - peer.testpeerorg2
-    orderers:
-    - orderer.testordererorg
+      - peer.testpeerorg1
+      - peer.testpeerorg2
     chaincodes:
-    - name: mycc
-      sequence: 1
+      - name: mycc
+        sequence: 1
+  secondchannel:
+    peers:
+      - peer.testpeerorg2
+      - peer.testpeerorg3
+    chaincodes:
+      - name: mycc
+        sequence: 1
 nodes:
   orderer.testordererorg:
     name: orderer
@@ -42,6 +52,7 @@ nodes:
     domain: testordererorg
     host: 127.0.0.1
     ssh_port: 22
+    dest: /data/fabric-distributed-tool/fdtdata
   peer.testpeerorg1:
     name: peer
     nodeport: 7051
@@ -50,6 +61,7 @@ nodes:
     domain: testpeerorg1
     host: 127.0.0.1
     ssh_port: 22
+    dest: /data/fabric-distributed-tool/fdtdata
   peer.testpeerorg2:
     name: peer
     nodeport: 8051
@@ -58,17 +70,26 @@ nodes:
     domain: testpeerorg2
     host: 127.0.0.1
     ssh_port: 22
+    dest: /data/fabric-distributed-tool/fdtdata
+  peer.testpeerorg3:
+    name: peer
+    nodeport: 9051
+    type: peer
+    org_id: testpeerorg3
+    domain: testpeerorg3
+    host: 127.0.0.1
+    ssh_port: 22
+    dest: /data/fabric-distributed-tool/fdtdata
 chaincodes:
   mycc:
-    path: $GOPATH/github.com/hyperledger/fabric-samples/chaincode/fabcar/go
+    path: /root/go/src/github.com/hyperledger/fabric-samples/asset-transfer-basic/chaincode-go
     version: v1
     policy: OR('testpeerorg1.peer','testpeerorg2.peer')
-    init_required: true
     init_func: InitLedger
 ~~~
 And then, use the bootstrap command to generate files
 ~~~bash
-
+fdt network generate --bootstrap --file
 ~~~
 Before starting the fabric network, you can modify files just generated, then using startup command to start the network.
 ~~~bash
@@ -78,7 +99,7 @@ If you want to stop the network, just using the shutdown command.
 ~~~bash
 fdt network shutdown -n testnetwork
 ~~~
-You can find more command in [scripts/localnet.sh](https://github.com/wjbbig/fabric-distributed-tool/blob/master/scripts/localnet.sh).
+You can find more usage in [docs](https://github.com/wjbbig/fabric-distributed-tool/blob/master/docs).
 
 ## Supported Features
 * buildup and shutdown fabric network
