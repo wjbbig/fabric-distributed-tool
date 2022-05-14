@@ -1,0 +1,69 @@
+# support 'solo' and 'etcdraft'
+consensus: solo
+# the moniker of this fabric network
+name: testnetwork
+# fabric version
+# v1.4: fabric v1.4.2 or later
+# v2.0: fabric v2.0.0 or later
+version: v2.0
+node_image_tag: 2.4.3 # image version of fabric peer and orderer
+ca_image_tag: 1.4.9
+couch_image_tag: 0.4.22
+channels:
+  firstchannel:
+    peers:
+      - peer.testpeerorg1
+      - peer.testpeerorg2
+    chaincodes:
+      - name: mycc
+        sequence: 1
+  secondchannel:
+    peers:
+      - peer.testpeerorg2
+      - peer.testpeerorg3
+    chaincodes:
+      - name: mycc
+        sequence: 1
+nodes:
+  orderer.testordererorg:
+    name: orderer
+    nodeport: 7050
+    type: orderer
+    org_id: testordererorg
+    domain: testordererorg
+    host: 127.0.0.1
+    ssh_port: 22
+    dest: /data/fabric-distributed-tool/fdtdata
+  peer.testpeerorg1:
+    name: peer
+    nodeport: 7051
+    type: peer
+    org_id: testpeerorg1
+    domain: testpeerorg1
+    host: 127.0.0.1
+    ssh_port: 22
+    dest: /data/fabric-distributed-tool/fdtdata
+  peer.testpeerorg2:
+    name: peer
+    nodeport: 8051
+    type: peer
+    org_id: testpeerorg2
+    domain: testpeerorg2
+    host: 127.0.0.1
+    ssh_port: 22
+    dest: /data/fabric-distributed-tool/fdtdata
+  peer.testpeerorg3:
+    name: peer
+    nodeport: 9051
+    type: peer
+    org_id: testpeerorg3
+    domain: testpeerorg3
+    host: 127.0.0.1
+    ssh_port: 22
+    dest: /data/fabric-distributed-tool/fdtdata
+chaincodes:
+  mycc:
+    path: /root/go/src/github.com/hyperledger/fabric-samples/asset-transfer-basic/chaincode-go
+    version: v1
+    policy: OR('testpeerorg1.peer','testpeerorg2.peer')
+    init_func: InitLedger
