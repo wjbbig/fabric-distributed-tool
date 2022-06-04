@@ -28,7 +28,7 @@ var (
 	ccVersion      string
 	ccPolicy       string
 	ccInitFunc     string
-	ccInitParam    string
+	ccInitParams   []string
 	ccInitRequired bool
 	ccSequence     int64
 	ifCouchdb      bool
@@ -53,12 +53,12 @@ func resetFlags() {
 	flags.StringVarP(&fabricVersion, "version", "V", "v1.4", "Version of fabric, value can be v1.4 or v2.0")
 	flags.StringVarP(&channelId, "channelid", "c", "", "Fabric channel name")
 	flags.StringVarP(&consensus, "consensus", "C", "", "Orderer consensus type of fabric network")
-	flags.StringVarP(&ccId, "chaincodeid", "n", "", "Chaincode name")
-	flags.StringVarP(&ccPath, "chaincodepath", "P", "", "Chaincode path")
-	flags.StringVarP(&ccVersion, "chaincodeversion", "v", "", "chaincode version")
-	flags.StringVarP(&ccPolicy, "chaincodepolicy", "r", "", "chaincode policy")
-	flags.StringVarP(&ccInitFunc, "chaincodeinitfunc", "f", "", "chaincode initial function")
-	flags.StringVarP(&ccInitParam, "chaincodeinitparam", "i", "", "chaincode initial params")
+	flags.StringVarP(&ccId, "ccid", "n", "", "Chaincode name")
+	flags.StringVarP(&ccPath, "ccpath", "P", "", "Chaincode path")
+	flags.StringVarP(&ccVersion, "ccversion", "v", "", "chaincode version")
+	flags.StringVarP(&ccPolicy, "ccpolicy", "r", "", "chaincode policy")
+	flags.StringVarP(&ccInitFunc, "ccinitfunc", "f", "", "chaincode initial function")
+	flags.StringSliceVar(&ccInitParams, "param", []string{}, "chaincode initial params")
 	flags.StringVarP(&networkName, "network", "w", "", "Fabric network name")
 	flags.BoolVar(&ifCouchdb, "couchdb", false, "If use couchdb")
 	flags.BoolVar(&ccInitRequired, "initcc", false, "If chaincode needs init")
@@ -73,29 +73,30 @@ var (
 		Use:   "generate",
 		Short: "generate necessary files of fabric.",
 		Long:  "generate crypto-config.yaml, configtx.yaml and docker-compose.yaml.",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Run: func(cmd *cobra.Command, args []string) {
 			var err error
-			//if utils.NetworkExist(networkName) {
-			//	logger.Errorf("network %s exists", networkName)
-			//	return nil
-			//}
 			dataDir, err = utils.GetNetworkPathByName(dataDir, "")
 			if err != nil {
 				logger.Error(err.Error())
-				return nil
+				return
 			}
 			if _, err = os.Stat(dataDir); err != nil {
 				_ = os.MkdirAll(dataDir, 0755)
 			} else {
 				data, err := ioutil.ReadFile(filepath.Join(dataDir, network.DefaultNetworkConfigName))
 				if err == nil && data != nil && len(data) != 0 {
+					if utils.NetworkExist(networkName) {
+						logger.Errorf("network %s exists", networkName)
+						return
+					}
 					if !file {
 						var flag string
 						fmt.Printf("an existing network configuration file was found in the %s，overwrite all? [y/n]\t", dataDir)
 						fmt.Scanf("%s", &flag)
 						if strings.ToUpper(flag) == "Y" {
 							if err := os.RemoveAll(dataDir); err != nil {
-								return err
+								logger.Error(err.Error())
+								return
 							}
 						}
 					}
@@ -105,7 +106,7 @@ var (
 			switch {
 			case bootstrap:
 				if err := utils.DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId, ccPath, ccVersion,
-					ccInitFunc, ccInitParam, ccPolicy, ccInitRequired, ccSequence, ifCouchdb, peerUrls,
+					ccInitFunc, ccInitParams, ccPolicy, ccInitRequired, ccSequence, ifCouchdb, peerUrls,
 					ordererUrls, fabricVersion, file); err != nil {
 					logger.Error(err.Error())
 				}
@@ -116,7 +117,6 @@ var (
 			default:
 				logger.Error("bootstrap or extend must be chosen one")
 			}
-			return nil
 		},
 	}
 )

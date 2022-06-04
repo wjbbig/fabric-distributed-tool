@@ -62,16 +62,17 @@ type CA struct {
 
 type Channel struct {
 	Peers      []string            `yaml:"peers,omitempty"`
+	Orderer    []string            `yaml:"orderer,omitempty"`
 	Chaincodes []*ChannelChaincode `yaml:"chaincodes,omitempty"`
 }
 
 type Chaincode struct {
-	Path         string `yaml:"path,omitempty"`
-	Version      string `yaml:"version,omitempty"`
-	Policy       string `yaml:"policy,omitempty"`
-	InitRequired bool   `yaml:"init_required,omitempty"`
-	InitFunc     string `yaml:"init_func,omitempty"`
-	InitParam    string `yaml:"init_param,omitempty"`
+	Path         string   `yaml:"path,omitempty"`
+	Version      string   `yaml:"version,omitempty"`
+	Policy       string   `yaml:"policy,omitempty"`
+	InitRequired bool     `yaml:"init_required,omitempty"`
+	InitFunc     string   `yaml:"init_func,omitempty"`
+	InitParam    []string `yaml:"init_param,omitempty"`
 }
 
 type ChannelChaincode struct {
@@ -173,7 +174,7 @@ func (nc *NetworkConfig) GetNodesByChannel(channelId string) (peerNodes []*Node,
 }
 
 // ExtendChannelChaincode installs a new chaincode on channel
-func (nc *NetworkConfig) ExtendChannelChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam string, initRequired bool) error {
+func (nc *NetworkConfig) ExtendChannelChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc string, initParam []string, initRequired bool) error {
 	chaincode, exist := nc.Chaincodes[ccId]
 	if exist {
 		return errors.Errorf("chaincode %s exists", ccId)
@@ -199,7 +200,7 @@ func (nc *NetworkConfig) ExtendChannelChaincode(dataDir, channelId, ccId, ccPath
 	return writeNetworkConfig(dataDir, nc)
 }
 
-func (nc *NetworkConfig) UpgradeChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam string, initRequired bool) error {
+func (nc *NetworkConfig) UpgradeChaincode(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc string, initParams []string, initRequired bool) error {
 	chaincode, exist := nc.Chaincodes[ccId]
 	if !exist {
 		return errors.Errorf("chaincode %s does not exist", ccId)
@@ -210,8 +211,8 @@ func (nc *NetworkConfig) UpgradeChaincode(dataDir, channelId, ccId, ccPath, ccVe
 	if ccPolicy != "" {
 		chaincode.Policy = ccPolicy
 	}
-	if initParam != "" {
-		chaincode.InitParam = initParam
+	if utils.IsEmpty(initParams) {
+		chaincode.InitParam = initParams
 	}
 	if initFunc != "" {
 		chaincode.InitFunc = initFunc
@@ -294,10 +295,10 @@ func (nc *NetworkConfig) GetNode(nodeName string) *Node {
 	return node
 }
 
-func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string, networkVersion string) (*NetworkConfig, error) {
-	if err := validateBasic(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy, sequence, peerUrls, ordererUrls, networkVersion); err != nil {
-		return nil, err
-	}
+func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc string, ccInitParams []string, ccPolicy string, ccInitRequired bool, sequence int64, couchdb bool, peerUrls, ordererUrls []string, networkVersion string) (*NetworkConfig, error) {
+	//if err := validateBasic(fileDir, networkName, channelId, consensus, ccId, ccPath, ccVersion, ccInitFunc, ccInitParam, ccPolicy, sequence, peerUrls, ordererUrls, networkVersion); err != nil {
+	//	return nil, err
+	//}
 	network := &NetworkConfig{
 		Name:          networkName,
 		Consensus:     consensus,
@@ -316,7 +317,7 @@ func GenerateNetworkConfig(fileDir, networkName, channelId, consensus, ccId, ccP
 			Policy:       ccPolicy,
 			Version:      ccVersion,
 			InitRequired: ccInitRequired,
-			InitParam:    ccInitParam,
+			InitParam:    ccInitParams,
 			InitFunc:     ccInitFunc,
 		}
 		network.Chaincodes = map[string]*Chaincode{

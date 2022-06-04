@@ -23,7 +23,7 @@ var (
 	ccPolicy     string
 	initRequired bool
 	initFunc     string
-	initParam    string
+	initParams   []string
 	ccaas        bool
 )
 
@@ -37,7 +37,7 @@ var installChaincodeCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := utils.DoDeployccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam, initRequired, ccaas); err != nil {
+		if err := utils.DoDeployccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParams, initRequired, ccaas); err != nil {
 			logger.Error(err.Error())
 		}
 		return nil
@@ -61,7 +61,7 @@ func resetFlags() {
 	flags.StringVarP(&ccVersion, "ccversion", "v", "", "The version of new chaincode")
 	flags.BoolVar(&initRequired, "initcc", false, "If the new chaincode needs initialization")
 	flags.StringVar(&ccPolicy, "policy", "", "The endorsement policy of new chaincode")
-	flags.StringVarP(&initParam, "param", "i", "", "The initial param of new chaincode")
+	flags.StringSliceVar(&initParams, "param", []string{}, "The initial param of new chaincode")
 	flags.StringVarP(&initFunc, "func", "f", "", "The initial function of new chaincode")
 	flags.BoolVar(&ccaas, "ccaas", false, "Deploy chaincode as CCaaS mode")
 }

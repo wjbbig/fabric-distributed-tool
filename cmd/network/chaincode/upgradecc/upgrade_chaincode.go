@@ -24,7 +24,7 @@ var (
 	redeploy     bool
 	initRequired bool
 	initFunc     string
-	initParam    string
+	initParams   []string
 )
 
 var upgradeChaincodeCmd = &cobra.Command{
@@ -37,7 +37,7 @@ var upgradeChaincodeCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := utils.DoUpgradeccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParam, initRequired, redeploy); err != nil {
+		if err := utils.DoUpgradeccCmd(dataDir, channelId, ccId, ccPath, ccVersion, ccPolicy, initFunc, initParams, initRequired, redeploy); err != nil {
 			logger.Error(err.Error())
 		}
 		return nil
@@ -63,6 +63,6 @@ func resetFlags() {
 	flags.BoolVar(&redeploy, "redeploy", false, "If the new chaincode needs redeploy. This option is only used by fabric v2.0, "+
 		"if we only update chaincode policy, redeploy should be false")
 	flags.StringVar(&ccPolicy, "policy", "", "The endorsement policy of new chaincode")
-	flags.StringVar(&initParam, "param", "", "The initial param of new chaincode")
+	flags.StringSliceVar(&initParams, "param", []string{}, "The initial param of new chaincode")
 	flags.StringVar(&initFunc, "func", "", "The initial function of new chaincode")
 }

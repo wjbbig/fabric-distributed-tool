@@ -185,3 +185,7 @@ func DeduplicatedSlice(s []string) []string {
 	}
 	return deduplicatedSlice
 }
+
+func IsEmpty(s []string) bool {
+	return s == nil || (len(s) == 0)
+}
