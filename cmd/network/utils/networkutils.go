@@ -1138,17 +1138,17 @@ func GetNetworkPathByName(dataDir, name string) (string, error) {
 	return path, nil
 }
 
-func NetworkExist(name string) bool {
+func NetworkExist(name string) error {
 	if name == "" {
-		return true
+		return errors.New("network name is empty")
 	}
 	networkPathConf, err := network.Load()
 	if err != nil {
-		return true
+		return err
 	}
 	path := networkPathConf.GetNetworkPath(name)
 	if path == "" {
-		return false
+		return nil
 	}
-	return false
+	return nil
 }

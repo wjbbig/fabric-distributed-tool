@@ -7,9 +7,7 @@ import (
 	"github.com/wjbbig/fabric-distributed-tool/cmd/network/utils"
 	mylogger "github.com/wjbbig/fabric-distributed-tool/logger"
 	"github.com/wjbbig/fabric-distributed-tool/network"
-	"io/ioutil"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -83,10 +81,11 @@ var (
 			if _, err = os.Stat(dataDir); err != nil {
 				_ = os.MkdirAll(dataDir, 0755)
 			} else {
-				data, err := ioutil.ReadFile(filepath.Join(dataDir, network.DefaultNetworkConfigName))
-				if err == nil && data != nil && len(data) != 0 {
-					if utils.NetworkExist(networkName) {
-						logger.Errorf("network %s exists", networkName)
+				config, err := network.UnmarshalNetworkConfig(dataDir)
+				if err == nil {
+					networkName = config.Name
+					if err := utils.NetworkExist(networkName); err != nil {
+						logger.Errorf(err.Error())
 						return
 					}
 					if !file {

@@ -3,7 +3,6 @@ package network
 import (
 	"encoding/json"
 	"github.com/pkg/errors"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 )
@@ -43,18 +42,25 @@ func (hdc *HomeDirConfig) Store() error {
 		}
 	}
 	data, _ := json.Marshal(hdc)
-	return ioutil.WriteFile(configPath, data, 0755)
+	return os.WriteFile(configPath, data, 0755)
 }
 
 func Load() (*HomeDirConfig, error) {
 	homeDirPath := os.Getenv("HOME")
 	configPath := filepath.Join(homeDirPath, ".fdt", networkMappingFileName)
-	data, err := ioutil.ReadFile(configPath)
+	hdc := NewHomeDirConfig()
+	_, err := os.Stat(configPath)
+	if err != nil {
+		if err = hdc.Store(); err != nil {
+			return nil, err
+		}
+		return hdc, nil
+	}
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, errors.Wrap(err, "load network mapping config failed")
 	}
 
-	hdc := NewHomeDirConfig()
 	if err = json.Unmarshal(data, &hdc); err != nil {
 		return nil, errors.Wrap(err, "json unmarshal networkPathMapping failed")
 	}
