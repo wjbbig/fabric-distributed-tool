@@ -96,7 +96,7 @@ func GenerateConfigtx(dataDir, consensus, channelId, fversion string, networkCon
 	return nil
 }
 
-func GenerateDockerCompose(dataDir string, peerNodes, ordererNodes []*network.Node, imageTags []string, couchdb bool, ca bool) error {
+func GenerateDockerCompose(dataDir, networkName string, peerNodes, ordererNodes []*network.Node, imageTags []string, couchdb bool, ca bool) error {
 	peersByOrg := make(map[string][]*network.Node)
 	for _, peerNode := range peerNodes {
 		peersByOrg[peerNode.OrgId] = append(peersByOrg[peerNode.OrgId], peerNode)
@@ -238,20 +238,20 @@ func TransferFilesAllNodes(sshUtil *sshutil.SSHUtil, dataDir string, nc *network
 }
 
 func transferFiles(sshClient *sshutil.SSHClient, nodeName, dataDir string) error {
-	_, orgName, _ := utils.SplitNameOrgDomain(nodeName)
+	_, _, domain := utils.SplitNameOrgDomain(nodeName)
 	// send node self keypairs and certs
 	var certDir string
 	var certDestDir string
 	if sshClient.NodeType == network.PeerNode {
 		peerCryptoConfigPrefix := filepath.Join(dataDir, "crypto-config", "peerOrganizations")
 		peerCryptoConfigDestPrefix := filepath.Join(sshClient.DestPath, "crypto-config", "peerOrganizations")
-		certDir = filepath.Join(peerCryptoConfigPrefix, orgName)
-		certDestDir = filepath.Join(peerCryptoConfigDestPrefix, orgName)
+		certDir = filepath.Join(peerCryptoConfigPrefix, domain)
+		certDestDir = filepath.Join(peerCryptoConfigDestPrefix, domain)
 	} else {
 		ordererCryptoConfigPrefix := filepath.Join(dataDir, "crypto-config", "ordererOrganizations")
 		ordererCryptoConfigDestPrefix := filepath.Join(sshClient.DestPath, "crypto-config", "ordererOrganizations")
-		certDir = filepath.Join(ordererCryptoConfigPrefix, orgName)
-		certDestDir = filepath.Join(ordererCryptoConfigDestPrefix, orgName)
+		certDir = filepath.Join(ordererCryptoConfigPrefix, domain)
+		certDestDir = filepath.Join(ordererCryptoConfigDestPrefix, domain)
 	}
 	err := sshClient.Sftp(certDir, certDestDir)
 	if err != nil {
@@ -631,7 +631,7 @@ func DoGenerateBootstrapCommand(dataDir, networkName, channelId, consensus, ccId
 	if err := GenerateConfigtx(dataDir, consensus, channelId, fVersion, networkConfig); err != nil {
 		return err
 	}
-	if err := GenerateDockerCompose(dataDir, networkConfig.GetPeerNodes(), networkConfig.GetOrdererNodes(), networkConfig.GetImageTags(), ifCouchdb, false); err != nil {
+	if err := GenerateDockerCompose(dataDir, networkName, networkConfig.GetPeerNodes(), networkConfig.GetOrdererNodes(), networkConfig.GetImageTags(), ifCouchdb, false); err != nil {
 		return err
 	}
 	if err := GenerateConnectionProfile(dataDir, channelId, networkConfig); err != nil {
@@ -869,7 +869,7 @@ func DoExtendNodeCommand(dataDir string, couchdb bool, peers, orderers []string)
 		return err
 	}
 	// generate docker-compose file
-	if err := GenerateDockerCompose(dataDir, newPeerNodes, newOrdererNodes, nc.GetImageTags(), couchdb, false); err != nil {
+	if err := GenerateDockerCompose(dataDir, nc.Name, newPeerNodes, newOrdererNodes, nc.GetImageTags(), couchdb, false); err != nil {
 		return err
 	}
 	// update connection-profile
